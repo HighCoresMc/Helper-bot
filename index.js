@@ -615,34 +615,24 @@ async function updateDiscordStatsEmbed(guild, data) {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
-        // تصميم الـ Embed البرجي (Tower Style) - عريض ومنظم
+        // تصميم الـ Embed العريض (Log Stream Style)
         const embed = {
-            author: { name: 'OPEX INFRASTRUCTURE MONITOR', icon_url: guild.iconURL() },
-            title: '`[ SYSTEM OPERATIONAL - STABLE ]`',
+            author: { name: '📊 OPEX CORE LOG', icon_url: guild.iconURL() },
+            description: '`[ STATUS: ONLINE • SYNC: STABLE ]`',
             color: 0x6366F1,
-            description: 
-                '```ml\n' +
-                'NETWORK_STATUS: CONNECTED\n' +
-                'SYNC_INTERVAL:  15s\n' +
-                'ENCRYPTION:     SSL/AES-256\n' +
-                '```',
             fields: [
-                { name: '👤 USER DATABASE', value: `\`\`\`yaml\nTotal Registered: ${data.totalMembers}\nActive Presence:  ${data.onlineMembers}\n\`\`\``, inline: false },
-                { name: '🛡️ SECURITY & OPS', value: `\`\`\`yaml\nStaff Online:     ${data.onlineStaff}\nOpen Tickets:     ${data.openTickets}\n\`\`\``, inline: false },
-                { name: '📡 SERVER INFRA', value: `\`\`\`yaml\nBoost Tier:       Level ${data.boostLevel}\nDefined Channels: ${data.totalChannels}\n\`\`\``, inline: false }
+                { name: '👥 USERS', value: `\`${data.totalMembers}\` Tot\n\`${data.onlineMembers}\` On`, inline: true },
+                { name: '🛡️ STAFF', value: `\`${data.onlineStaff}\` Adm\n\`${data.openTickets}\` Tkt`, inline: true },
+                { name: '📡 SERVER', value: `\`lvl ${data.boostLevel}\` Bst\n\`${data.totalChannels}\` Chs`, inline: true }
             ],
-            footer: { text: 'Opex Master Core • v2.1 • ' + new Date().toLocaleTimeString('en-GB') }
+            footer: { text: 'Auto-log Stream • ' + new Date().toLocaleTimeString('en-GB') }
         };
 
-        // إرسال جديد ومسح القديم ليكون مثل اللوق
-        try {
-            await channel.bulkDelete(1, true).catch(() => {});
-            await channel.send({ embeds: [embed] });
-        } catch(e) {
-            await channel.send({ embeds: [embed] });
-        }
+        // إرسال رسالة جديدة فقط (بدون مسح)
+        await channel.send({ embeds: [embed] });
+
     } catch (e) {
-        console.warn('⚠️ Luxurious Wide Embed Update Failed:', e.message);
+        console.warn('⚠️ Log Stream Error:', e.message);
     }
 }
 
