@@ -615,24 +615,39 @@ async function updateDiscordStatsEmbed(guild, data) {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
-        // تصميم الـ Embed العريض (Log Stream Style)
         const embed = {
-            author: { name: '📊 OPEX CORE LOG', icon_url: guild.iconURL() },
-            description: '`[ STATUS: ONLINE • SYNC: STABLE ]`',
+            title: '📊 OPEX SERVER STATISTICS',
             color: 0x6366F1,
+            thumbnail: { url: guild.iconURL() },
             fields: [
-                { name: '👥 USERS', value: `\`${data.totalMembers}\` Tot\n\`${data.onlineMembers}\` On`, inline: true },
-                { name: '🛡️ STAFF', value: `\`${data.onlineStaff}\` Adm\n\`${data.openTickets}\` Tkt`, inline: true },
-                { name: '📡 SERVER', value: `\`lvl ${data.boostLevel}\` Bst\n\`${data.totalChannels}\` Chs`, inline: true }
+                { name: '👥 Total Members', value: `\`${data.totalMembers}\``, inline: true },
+                { name: '🟢 Online Users', value: `\`${data.onlineMembers}\``, inline: true },
+                { name: '🛡️ Online Staff', value: `\`${data.onlineStaff}\``, inline: true },
+                { name: '📁 Total Channels', value: `\`${data.totalChannels}\``, inline: true },
+                { name: '🏅 Total Roles', value: `\`${data.totalRoles}\``, inline: true },
+                { name: '💎 Server Boosts', value: `\`Level ${data.boostLevel} (${data.boostCount} Boosts)\``, inline: true },
+                { name: '🎟️ Open Tickets', value: `\`${data.openTickets}\``, inline: true },
+                { name: '✅ Closed Tickets', value: `\`${data.closedTickets}\``, inline: true }
             ],
-            footer: { text: 'Auto-log Stream • ' + new Date().toLocaleTimeString('en-GB') }
+            footer: { text: 'System Synchronized • ' + new Date().toLocaleString('en-GB') },
+            timestamp: new Date()
         };
 
-        // إرسال رسالة جديدة فقط (بدون مسح)
-        await channel.send({ embeds: [embed] });
-
+        if (DC_STATS_MESSAGE_ID && DC_STATS_MESSAGE_ID !== 'your_dc_status_msg_id') {
+            try {
+                const msg = await channel.messages.fetch(DC_STATS_MESSAGE_ID);
+                await msg.edit({ embeds: [embed] });
+            } catch(e) {
+                const newMsg = await channel.send({ embeds: [embed] });
+                console.log('📍 New Discord Stats Message ID (Edit fallback):', newMsg.id);
+            }
+        } else {
+            const newMsg = await channel.send({ embeds: [embed] });
+            console.log('📍 New Discord Stats Message ID:', newMsg.id);
+            console.log('PLEASE ADD THIS ID TO YOUR RAILWAY VARIABLES (DC_STATS_MESSAGE_ID)');
+        }
     } catch (e) {
-        console.warn('⚠️ Log Stream Error:', e.message);
+        console.warn('⚠️ Dashboard Restore Failed:', e.message);
     }
 }
 
