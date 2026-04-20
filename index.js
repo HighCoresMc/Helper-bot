@@ -8,8 +8,8 @@ require('dotenv').config();
 // إعدادات البوت من متغيرات البيئة
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const LOGGING_CHANNEL_ID = process.env.LOGGING_CHANNEL_ID;
-const TICKETS_FILE = path.join(__dirname, '../tickets.js');
-const TRANSCRIPTS_FOLDER = path.join(__dirname, '../transcripts');
+const TICKETS_FILE = path.join(__dirname, './tickets.js');
+const TRANSCRIPTS_FOLDER = path.join(__dirname, './transcripts');
 
 // إعدادات MC Server Status
 const MC_STATUS_CHANNEL_ID = process.env.MC_STATUS_CHANNEL_ID || '1487139736748425236';
