@@ -623,7 +623,8 @@ async function updateDiscordStatsEmbed(guild, data) {
             description: 'The following data represents the current state of the Opex Infrastructure.',
             fields: [
                 { name: '👥 Server Members', value: `> **Total Population:** \`${data.totalMembers}\` members\n> **Online Presence:** \`${data.onlineMembers}\` active`, inline: false },
-                { name: '🛡️ Professional Staff', value: `> **Active Administrators:** \`${data.onlineStaff}\` online\n> **Current Open Tickets:** \`${data.openTickets}\` tickets`, inline: false },
+                { name: '🛡️ Professional Staff', value: `> **Active Administrators:** \`${data.onlineStaff}\` online`, inline: false },
+                { name: '🎟️ Support Operations', value: `> **Active Support Tickets:** \`${data.openTickets}\` tickets\n> **Total Resolved Tickets:** \`${data.closedTickets}\` tickets`, inline: false },
                 { name: '📡 System Infrastructure', value: `> **Total Channels:** \`${data.totalChannels}\` nodes\n> **Guild Boost Level:** \`Level ${data.boostLevel}\` (\`${data.boostCount}\` boosts)`, inline: false }
             ],
             footer: { text: 'Real-time Log Entry • ' + new Date().toLocaleTimeString('en-GB') }
