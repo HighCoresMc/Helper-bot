@@ -10,6 +10,7 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const LOGGING_CHANNEL_ID = process.env.LOGGING_CHANNEL_ID;
 const TICKETS_FILE = path.join(__dirname, './tickets.js');
 const TRANSCRIPTS_FOLDER = path.join(__dirname, './transcripts');
+const TICKET_CATEGORY_ID = '1487143174567628840';
 
 // إعدادات MC Server Status
 const MC_STATUS_CHANNEL_ID = process.env.MC_STATUS_CHANNEL_ID || '1487139736748425236';
@@ -533,8 +534,14 @@ async function fetchDiscordStats() {
             m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)
         ).size;
         
-        // جلب عدد التكتات من Supabase
+        // جلب عدد التكتات المفتوحة من الكيتاغوري (طرح 2 للمستثنى)
+        const ticketCategory = guild.channels.cache.get(TICKET_CATEGORY_ID);
         let openTickets = 0;
+        if (ticketCategory && ticketCategory.children) {
+            openTickets = Math.max(0, ticketCategory.children.cache.size - 2);
+        }
+        
+        // جلب عدد التكتات الكلي من Supabase (اختياري للعرض)
         let closedTickets = 0;
         
         try {
