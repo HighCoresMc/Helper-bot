@@ -369,9 +369,9 @@ client.once('clientReady', () => {
     fetchMCStatus();
     setInterval(fetchMCStatus, 60 * 1000);
     
-    // جلب Discord Stats كل 5 دقائق
+    // جلب Discord Stats كل 5 ثوانٍ
     fetchDiscordStats();
-    setInterval(fetchDiscordStats, 5 * 60 * 1000);
+    setInterval(fetchDiscordStats, 5 * 1000);
 });
 
 // ==========================================
