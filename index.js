@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits } = require('discord.js');
+const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
 const https = require('https');
@@ -370,9 +370,9 @@ client.once('clientReady', () => {
     fetchMCStatus();
     setInterval(fetchMCStatus, 60 * 1000);
     
-    // جلب Discord Stats كل 5 ثوانٍ
+    // جلب Discord Stats كل 15 ثانية
     fetchDiscordStats();
-    setInterval(fetchDiscordStats, 5 * 1000);
+    setInterval(fetchDiscordStats, 15 * 1000);
 });
 
 // ==========================================
@@ -615,39 +615,42 @@ async function updateDiscordStatsEmbed(guild, data) {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
+        // تصميم الـ Embed الفخم والمختصر
         const embed = {
-            title: '📊 OPEX SERVER STATISTICS',
+            author: { name: 'OPEX SYSTEM MONITOR', icon_url: guild.iconURL() },
+            description: '`[ SYSTEM PULSE: EXCELLENT ]`',
             color: 0x6366F1,
-            thumbnail: { url: guild.iconURL() },
             fields: [
-                { name: '👥 Total Members', value: `\`${data.totalMembers}\``, inline: true },
-                { name: '🟢 Online Users', value: `\`${data.onlineMembers}\``, inline: true },
-                { name: '🛡️ Online Staff', value: `\`${data.onlineStaff}\``, inline: true },
-                { name: '📁 Total Channels', value: `\`${data.totalChannels}\``, inline: true },
-                { name: '🏅 Total Roles', value: `\`${data.totalRoles}\``, inline: true },
-                { name: '💎 Server Boosts', value: `\`Level ${data.boostLevel} (${data.boostCount} Boosts)\``, inline: true },
-                { name: '🎟️ Open Tickets', value: `\`${data.openTickets}\``, inline: true },
-                { name: '✅ Closed Tickets', value: `\`${data.closedTickets}\``, inline: true }
+                { name: '👥 USERS', value: `\`${data.totalMembers}\` Total\n\`${data.onlineMembers}\` Online`, inline: true },
+                { name: '🛡️ OPS', value: `\`${data.onlineStaff}\` Admin\n\`${data.openTickets}\` Tickets`, inline: true },
+                { name: '⚡ INFRA', value: `\`lvl ${data.boostLevel}\` Boost\n\`${data.totalChannels}\` Chans`, inline: true }
             ],
-            footer: { text: 'Last Sync: ' + new Date().toLocaleString('en-GB') },
-            timestamp: new Date()
+            footer: { text: 'Last Sync: ' + new Date().toLocaleTimeString('en-GB') + ' • Auto-refresh every 15s' }
         };
 
-        if (DC_STATS_MESSAGE_ID && DC_STATS_MESSAGE_ID !== 'your_dc_status_msg_id') {
-            try {
-                const msg = await channel.messages.fetch(DC_STATS_MESSAGE_ID);
-                await msg.edit({ embeds: [embed] });
-            } catch(e) {
-                const newMsg = await channel.send({ embeds: [embed] });
-                console.log('📍 New Discord Stats Message ID (Edit failed):', newMsg.id);
-            }
-        } else {
-            const newMsg = await channel.send({ embeds: [embed] });
-            console.log('📍 New Discord Stats Message ID:', newMsg.id);
-            console.log('PLEASE ADD THIS ID TO YOUR RAILWAY VARIABLES (DC_STATS_MESSAGE_ID)');
+        // إضافة أزرار Components
+        const row = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setLabel('Access Dashboard')
+                    .setURL('https://opex-promo-system.up.railway.app/')
+                    .setStyle(ButtonStyle.Link),
+                new ButtonBuilder()
+                    .setCustomId('status_sync')
+                    .setLabel('System Online')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(true)
+            );
+
+        // إرسال جديد ومسح القديم ليكون مثل اللوق
+        try {
+            await channel.bulkDelete(1, true).catch(() => {});
+            await channel.send({ embeds: [embed], components: [row] });
+        } catch(e) {
+            await channel.send({ embeds: [embed], components: [row] });
         }
     } catch (e) {
-        console.warn('⚠️ DC Stats Embed update failed:', e.message);
+        console.warn('⚠️ Luxurious Embed Update Failed:', e.message);
     }
 }
 
