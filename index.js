@@ -615,19 +615,19 @@ async function updateDiscordStatsEmbed(guild, data) {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
-        // تصميم الـ Embed الشامل والفخم - إرسال متتابع
+        // تصميم الـ Embed الشامل والفخم - كلام بشري بسيط
         const embed = {
-            author: { name: 'OPEX DISCORD SYSTEM MONITOR', icon_url: guild.iconURL() },
-            title: '`[ CORE SYSTEM SYNCHRONIZATION ]`',
+            author: { name: 'OPEX DISCORD SERVER MONITOR', icon_url: guild.iconURL() },
+            title: '`[ SERVER LIVE STATUS ]`',
             color: 0x6366F1,
-            description: 'The following data represents the current state of the Opex Infrastructure.',
+            description: 'Current real-time information about Opex server.',
             fields: [
-                { name: '👥 Server Members', value: `> **Total Population:** \`${data.totalMembers}\` members\n> **Online Presence:** \`${data.onlineMembers}\` active`, inline: false },
-                { name: '🛡️ Professional Staff', value: `> **Active Administrators:** \`${data.onlineStaff}\` online`, inline: false },
-                { name: '🎟️ Support Operations', value: `> **Active Support Tickets:** \`${data.openTickets}\` tickets\n> **Total Resolved Tickets:** \`${data.closedTickets}\` tickets`, inline: false },
-                { name: '📡 System Infrastructure', value: `> **Total Channels:** \`${data.totalChannels}\` nodes\n> **Guild Boost Level:** \`Level ${data.boostLevel}\` (\`${data.boostCount}\` boosts)`, inline: false }
+                { name: '👥 Members', value: `> **Total Members:** \`${data.totalMembers}\` \n> **Online Now:** \`${data.onlineMembers}\``, inline: false },
+                { name: '🛡️ Staff Team', value: `> **Online Staff:** \`${data.onlineStaff}\``, inline: false },
+                { name: '🎟️ Support Tickets', value: `> **Open Tickets:** \`${data.openTickets}\` \n> **Finished Tickets:** \`${data.closedTickets}\``, inline: false },
+                { name: '📡 Server Info', value: `> **Total Channels:** \`${data.totalChannels}\` \n> **Boost Level:** \`Level ${data.boostLevel}\` (\`${data.boostCount}\` boosts)`, inline: false }
             ],
-            footer: { text: 'Real-time Log Entry • ' + new Date().toLocaleTimeString('en-GB') }
+            footer: { text: 'Last Update • ' + new Date().toLocaleTimeString('en-GB') }
         };
 
         // إرسال رسالة جديدة كل مرة (نظام اللوق المتتابع)
