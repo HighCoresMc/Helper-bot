@@ -370,9 +370,9 @@ client.once('clientReady', () => {
     fetchMCStatus();
     setInterval(fetchMCStatus, 60 * 1000);
     
-    // جلب Discord Stats كل 15 ثانية
+    // جلب Discord Stats كل 16 ثانية
     fetchDiscordStats();
-    setInterval(fetchDiscordStats, 15 * 1000);
+    setInterval(fetchDiscordStats, 16 * 1000);
 });
 
 // ==========================================
@@ -615,39 +615,25 @@ async function updateDiscordStatsEmbed(guild, data) {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
+        // تصميم الـ Embed الشامل والفخم - إرسال متتابع
         const embed = {
-            title: '📊 OPEX SERVER STATISTICS',
+            author: { name: 'OPEX DISCORD SYSTEM MONITOR', icon_url: guild.iconURL() },
+            title: '`[ CORE SYSTEM SYNCHRONIZATION ]`',
             color: 0x6366F1,
-            thumbnail: { url: guild.iconURL() },
+            description: 'The following data represents the current state of the Opex Infrastructure.',
             fields: [
-                { name: '👥 Total Members', value: `\`${data.totalMembers}\``, inline: true },
-                { name: '🟢 Online Users', value: `\`${data.onlineMembers}\``, inline: true },
-                { name: '🛡️ Online Staff', value: `\`${data.onlineStaff}\``, inline: true },
-                { name: '📁 Total Channels', value: `\`${data.totalChannels}\``, inline: true },
-                { name: '🏅 Total Roles', value: `\`${data.totalRoles}\``, inline: true },
-                { name: '💎 Server Boosts', value: `\`Level ${data.boostLevel} (${data.boostCount} Boosts)\``, inline: true },
-                { name: '🎟️ Open Tickets', value: `\`${data.openTickets}\``, inline: true },
-                { name: '✅ Closed Tickets', value: `\`${data.closedTickets}\``, inline: true }
+                { name: '👥 Server Members', value: `> **Total Population:** \`${data.totalMembers}\` members\n> **Online Presence:** \`${data.onlineMembers}\` active`, inline: false },
+                { name: '🛡️ Professional Staff', value: `> **Active Administrators:** \`${data.onlineStaff}\` online\n> **Current Open Tickets:** \`${data.openTickets}\` tickets`, inline: false },
+                { name: '📡 System Infrastructure', value: `> **Total Channels:** \`${data.totalChannels}\` nodes\n> **Guild Boost Level:** \`Level ${data.boostLevel}\` (\`${data.boostCount}\` boosts)`, inline: false }
             ],
-            footer: { text: 'System Synchronized • ' + new Date().toLocaleString('en-GB') },
-            timestamp: new Date()
+            footer: { text: 'Real-time Log Entry • ' + new Date().toLocaleTimeString('en-GB') }
         };
 
-        if (DC_STATS_MESSAGE_ID && DC_STATS_MESSAGE_ID !== 'your_dc_status_msg_id') {
-            try {
-                const msg = await channel.messages.fetch(DC_STATS_MESSAGE_ID);
-                await msg.edit({ embeds: [embed] });
-            } catch(e) {
-                const newMsg = await channel.send({ embeds: [embed] });
-                console.log('📍 New Discord Stats Message ID (Edit fallback):', newMsg.id);
-            }
-        } else {
-            const newMsg = await channel.send({ embeds: [embed] });
-            console.log('📍 New Discord Stats Message ID:', newMsg.id);
-            console.log('PLEASE ADD THIS ID TO YOUR RAILWAY VARIABLES (DC_STATS_MESSAGE_ID)');
-        }
+        // إرسال رسالة جديدة كل مرة (نظام اللوق المتتابع)
+        await channel.send({ embeds: [embed] });
+
     } catch (e) {
-        console.warn('⚠️ Dashboard Restore Failed:', e.message);
+        console.warn('⚠️ Log Sync Error:', e.message);
     }
 }
 
