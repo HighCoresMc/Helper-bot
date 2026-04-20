@@ -646,18 +646,6 @@ async function updateDiscordStatsEmbed(guild, data) {
     }
 }
 
-        // إرسال جديد ومسح القديم ليكون مثل اللوق
-        try {
-            await channel.bulkDelete(1, true).catch(() => {});
-            await channel.send({ embeds: [embed] });
-        } catch(e) {
-            await channel.send({ embeds: [embed] });
-        }
-    } catch (e) {
-        console.warn('⚠️ Luxurious Wide Embed Update Failed:', e.message);
-    }
-}
-
 // ==========================================
 // حفظ في Supabase (عام)
 // ==========================================
