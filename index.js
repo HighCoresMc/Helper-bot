@@ -615,42 +615,35 @@ async function updateDiscordStatsEmbed(guild, data) {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
-        // تصميم الـ Embed الفخم والمختصر
+        // تصميم الـ Embed العريض والفخم (Wide Banner Style)
         const embed = {
-            author: { name: 'OPEX SYSTEM MONITOR', icon_url: guild.iconURL() },
-            description: '`[ SYSTEM PULSE: EXCELLENT ]`',
+            author: { name: 'OPEX INFRASTRUCTURE MONITOR', icon_url: guild.iconURL() },
+            title: '`[ SYSTEM OPERATIONAL - STABLE ]`',
             color: 0x6366F1,
+            image: { url: 'https://i.imgur.com/8QO9M9n.png' }, // صورة بنر عريضة لتوسيع الـ Embed
+            description: 
+                '```ml\n' +
+                'NETWORK_STATUS: CONNECTED\n' +
+                'SYNC_INTERVAL:  15s\n' +
+                'ENCRYPTION:     AES-256\n' +
+                '```',
             fields: [
-                { name: '👥 USERS', value: `\`${data.totalMembers}\` Total\n\`${data.onlineMembers}\` Online`, inline: true },
-                { name: '🛡️ OPS', value: `\`${data.onlineStaff}\` Admin\n\`${data.openTickets}\` Tickets`, inline: true },
-                { name: '⚡ INFRA', value: `\`lvl ${data.boostLevel}\` Boost\n\`${data.totalChannels}\` Chans`, inline: true }
+                { name: '👤 USERS', value: `\`\`\`yaml\nTotal:  ${data.totalMembers}\nOnline: ${data.onlineMembers}\n\`\`\``, inline: true },
+                { name: '🛡️ STAFF', value: `\`\`\`yaml\nAdmin:  ${data.onlineStaff}\nTickets: ${data.openTickets}\n\`\`\``, inline: true },
+                { name: '📡 SERVER', value: `\`\`\`yaml\nLevel:  ${data.boostLevel}\nChans:  ${data.totalChannels}\n\`\`\``, inline: true }
             ],
-            footer: { text: 'Last Sync: ' + new Date().toLocaleTimeString('en-GB') + ' • Auto-refresh every 15s' }
+            footer: { text: 'Opex Master Core • ' + new Date().toLocaleTimeString('en-GB') }
         };
-
-        // إضافة أزرار Components
-        const row = new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setLabel('Access Dashboard')
-                    .setURL('https://opex-promo-system.up.railway.app/')
-                    .setStyle(ButtonStyle.Link),
-                new ButtonBuilder()
-                    .setCustomId('status_sync')
-                    .setLabel('System Online')
-                    .setStyle(ButtonStyle.Success)
-                    .setDisabled(true)
-            );
 
         // إرسال جديد ومسح القديم ليكون مثل اللوق
         try {
             await channel.bulkDelete(1, true).catch(() => {});
-            await channel.send({ embeds: [embed], components: [row] });
+            await channel.send({ embeds: [embed] });
         } catch(e) {
-            await channel.send({ embeds: [embed], components: [row] });
+            await channel.send({ embeds: [embed] });
         }
     } catch (e) {
-        console.warn('⚠️ Luxurious Embed Update Failed:', e.message);
+        console.warn('⚠️ Luxurious Wide Embed Update Failed:', e.message);
     }
 }
 
