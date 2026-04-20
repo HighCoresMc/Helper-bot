@@ -615,25 +615,36 @@ async function updateDiscordStatsEmbed(guild, data) {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
-        // تصميم الـ Embed العريض والفخم (Wide Banner Style)
+        // تصميم الـ Embed البرجي (Tower Style) - عريض ومنظم
         const embed = {
             author: { name: 'OPEX INFRASTRUCTURE MONITOR', icon_url: guild.iconURL() },
             title: '`[ SYSTEM OPERATIONAL - STABLE ]`',
             color: 0x6366F1,
-            image: { url: 'https://i.imgur.com/8QO9M9n.png' }, // صورة بنر عريضة لتوسيع الـ Embed
             description: 
                 '```ml\n' +
                 'NETWORK_STATUS: CONNECTED\n' +
                 'SYNC_INTERVAL:  15s\n' +
-                'ENCRYPTION:     AES-256\n' +
+                'ENCRYPTION:     SSL/AES-256\n' +
                 '```',
             fields: [
-                { name: '👤 USERS', value: `\`\`\`yaml\nTotal:  ${data.totalMembers}\nOnline: ${data.onlineMembers}\n\`\`\``, inline: true },
-                { name: '🛡️ STAFF', value: `\`\`\`yaml\nAdmin:  ${data.onlineStaff}\nTickets: ${data.openTickets}\n\`\`\``, inline: true },
-                { name: '📡 SERVER', value: `\`\`\`yaml\nLevel:  ${data.boostLevel}\nChans:  ${data.totalChannels}\n\`\`\``, inline: true }
+                { name: '👤 USER DATABASE', value: `\`\`\`yaml\nTotal Registered: ${data.totalMembers}\nActive Presence:  ${data.onlineMembers}\n\`\`\``, inline: false },
+                { name: '🛡️ SECURITY & OPS', value: `\`\`\`yaml\nStaff Online:     ${data.onlineStaff}\nOpen Tickets:     ${data.openTickets}\n\`\`\``, inline: false },
+                { name: '📡 SERVER INFRA', value: `\`\`\`yaml\nBoost Tier:       Level ${data.boostLevel}\nDefined Channels: ${data.totalChannels}\n\`\`\``, inline: false }
             ],
-            footer: { text: 'Opex Master Core • ' + new Date().toLocaleTimeString('en-GB') }
+            footer: { text: 'Opex Master Core • v2.1 • ' + new Date().toLocaleTimeString('en-GB') }
         };
+
+        // إرسال جديد ومسح القديم ليكون مثل اللوق
+        try {
+            await channel.bulkDelete(1, true).catch(() => {});
+            await channel.send({ embeds: [embed] });
+        } catch(e) {
+            await channel.send({ embeds: [embed] });
+        }
+    } catch (e) {
+        console.warn('⚠️ Luxurious Wide Embed Update Failed:', e.message);
+    }
+}
 
         // إرسال جديد ومسح القديم ليكون مثل اللوق
         try {
