@@ -22,6 +22,10 @@ const GITHUB_OWNER = process.env.GITHUB_OWNER;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 const GITHUB_FILE_PATH = 'tickets.js';
 
+// Discord Stats Channel
+const DC_STATS_CHANNEL_ID = '1495819247685996844';
+const DC_STATS_MESSAGE_ID = process.env.DC_STATS_MESSAGE_ID || 'your_dc_status_msg_id';
+
 // إنشاء مجلد الترانسكربتات إذا ما كان موجود
 if (!fs.existsSync(TRANSCRIPTS_FOLDER)) {
     fs.mkdirSync(TRANSCRIPTS_FOLDER, { recursive: true });
@@ -343,7 +347,7 @@ function downloadFile(url, filepath) {
 }
 
 // عند تشغيل البوت
-client.once('ready', () => {
+client.once('clientReady', () => {
     console.log('🤖 البوت شغال!');
     console.log(`📝 اسم البوت: ${client.user.tag}`);
     console.log(`📊 يراقب الروم: ${LOGGING_CHANNEL_ID}`);
@@ -583,14 +587,60 @@ async function fetchDiscordStats() {
             boostCount: guild.premiumSubscriptionCount || 0,
             openTickets: openTickets,
             closedTickets: closedTickets,
+            onlineStaff: guild.members.cache.filter(m => m.roles.cache.has(STAFF_ROLE_ID) && m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)).size,
             lastUpdated: new Date().toISOString()
         };
         
         await saveToSupabase('dc_status', dcData);
+        
+        // تحديث رسالة الدسكورد (English Embed)
+        await updateDiscordStatsEmbed(guild, dcData);
+        
         console.log('✅ DC Status updated:', onlineMembers + '/' + guild.memberCount, 'online |', openTickets, 'open tickets');
         
     } catch (err) {
         console.error('❌ خطأ في جلب DC Stats:', err.message);
+    }
+}
+
+async function updateDiscordStatsEmbed(guild, data) {
+    try {
+        const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
+        if (!channel) return;
+
+        const embed = {
+            title: '📊 OPEX SERVER STATISTICS',
+            color: 0x6366F1,
+            thumbnail: { url: guild.iconURL() },
+            fields: [
+                { name: '👥 Total Members', value: `\`${data.totalMembers}\``, inline: true },
+                { name: '🟢 Online Users', value: `\`${data.onlineMembers}\``, inline: true },
+                { name: '🛡️ Online Staff', value: `\`${data.onlineStaff}\``, inline: true },
+                { name: '📁 Total Channels', value: `\`${data.totalChannels}\``, inline: true },
+                { name: '🏅 Total Roles', value: `\`${data.totalRoles}\``, inline: true },
+                { name: '💎 Server Boosts', value: `\`Level ${data.boostLevel} (${data.boostCount} Boosts)\``, inline: true },
+                { name: '🎟️ Open Tickets', value: `\`${data.openTickets}\``, inline: true },
+                { name: '✅ Closed Tickets', value: `\`${data.closedTickets}\``, inline: true }
+            ],
+            footer: { text: 'Last Sync: ' + new Date().toLocaleString('en-GB') },
+            timestamp: new Date()
+        };
+
+        if (DC_STATS_MESSAGE_ID && DC_STATS_MESSAGE_ID !== 'your_dc_status_msg_id') {
+            try {
+                const msg = await channel.messages.fetch(DC_STATS_MESSAGE_ID);
+                await msg.edit({ embeds: [embed] });
+            } catch(e) {
+                const newMsg = await channel.send({ embeds: [embed] });
+                console.log('📍 New Discord Stats Message ID (Edit failed):', newMsg.id);
+            }
+        } else {
+            const newMsg = await channel.send({ embeds: [embed] });
+            console.log('📍 New Discord Stats Message ID:', newMsg.id);
+            console.log('PLEASE ADD THIS ID TO YOUR RAILWAY VARIABLES (DC_STATS_MESSAGE_ID)');
+        }
+    } catch (e) {
+        console.warn('⚠️ DC Stats Embed update failed:', e.message);
     }
 }
 
