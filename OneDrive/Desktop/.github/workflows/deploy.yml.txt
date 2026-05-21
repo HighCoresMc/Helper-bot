@@ -1,0 +1,31 @@
+name: Deploy to Pterodactyl
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      
+      - name: Pterodactyl File Upload
+        uses: matisiekpl/pterodactyl-deploy-action@v1.4.0
+        with:
+          panel-url: ${{ secrets.PTERODACTYL_URL }}
+          api-key: ${{ secrets.PTERODACTYL_API_KEY }}
+          server-id: ${{ secrets.PTERODACTYL_SERVER_ID }}
+
+      
+      - name: Restart Pterodactyl Server
+        run: |
+          curl -X POST "${{ secrets.PTERODACTYL_URL }}/api/client/servers/${{ secrets.PTERODACTYL_ID }}/power" \
+          -H "Authorization: Bearer ${{ secrets.PTERODACTYL_API_KEY }}" \
+          -H "Content-Type: application/json" \
+          -H "Accept: application/json" \
+          -d '{"signal": "restart"}'
