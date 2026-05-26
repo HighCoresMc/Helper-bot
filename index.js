@@ -720,6 +720,60 @@ client.on('presenceUpdate', () => {
 
 // عند استقبال رسالة
 client.on('messageCreate', async (message) => {
+    // Broadcast Command
+    if (message.content.startsWith('!bc')) {
+        if (message.author.id !== '1350531070222794804') return;
+
+        const args = message.content.split(' ');
+        let targetGuild;
+        let bcContent;
+
+        if (args.length >= 3 && /^\d{17,20}$/.test(args[1])) {
+            targetGuild = client.guilds.cache.get(args[1]) || await client.guilds.fetch(args[1]).catch(() => null);
+            const firstTwoWordsLength = args[0].length + 1 + args[1].length + 1;
+            bcContent = message.content.substring(firstTwoWordsLength).trim();
+        } else {
+            targetGuild = message.guild;
+            bcContent = message.content.substring(3).trim();
+        }
+
+        const attachments = Array.from(message.attachments.values()).map(att => att.url);
+
+        if (targetGuild && (bcContent || attachments.length > 0)) {
+            try {
+                await message.channel.send(`⏳ جاري الإرسال لسيرفر: ${targetGuild.name}...`);
+                const members = await targetGuild.members.fetch();
+                for (const [memberId, member] of members) {
+                    if (!member.user.bot) {
+                        const sendOptions = {};
+                        if (bcContent) {
+                            sendOptions.content = `${member.toString()}\n\n${bcContent}`;
+                        } else {
+                            sendOptions.content = `${member.toString()}`;
+                        }
+                        if (attachments.length > 0) {
+                            sendOptions.files = attachments;
+                        }
+                        try {
+                            await member.send(sendOptions);
+                            console.log(`✅ أرسلت لـ: ${member.user.username}`);
+                        } catch (err) {
+                            console.error(`❌ فشل الإرسال لـ: ${member.user.username}`);
+                        }
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                    }
+                }
+                await message.channel.send(`تم الانتهاء من البرودكاست لسيرفر ${targetGuild.name} ✅`);
+            } catch (err) {
+                console.error(err);
+                await message.channel.send(`❌ حدث خطأ أثناء إرسال البرودكاست: ${err.message}`);
+            }
+        } else {
+            await message.channel.send("❌ خطأ: لم أجد السيرفر أو الرسالة فارغة.");
+        }
+        return;
+    }
+
     // قبول رسائل البوتات في روم الـ Logging فقط
     if (message.channel.id === LOGGING_CHANNEL_ID && message.author.bot) {
         console.log('📬 رسالة جديدة من بوت في روم الـ Logging!');
