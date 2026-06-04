@@ -1216,8 +1216,8 @@ client.on('messageCreate', async (message) => {
                 transcriptUrl = transcriptUrl || embed.url;
             }
             if (embed.fields) {
-                embed.fields.forEach(F => {
-                    fullText += '\n' + (F.name || '') + '\n' + (F.value || '');
+                embed.fields.forEach(f => {
+                    fullText += '\n' + (f.name || '') + '\n' + (f.value || '');
                 });
             }
         }
