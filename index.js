@@ -14,7 +14,7 @@ const TICKET_CATEGORY_ID = '1487143174567628840';
 
 // إعدادات MC Server Status
 const MC_STATUS_CHANNEL_ID = process.env.MC_STATUS_CHANNEL_ID || '1487139736748425236';
-const MC_STATUS_MESSAGE_ID = process.env.MC_STATUS_MESSAGE_ID || 'your_status_message_id_here';
+const MC_STATUS_MESSAGE_ID = process.env.MC_STATUS_MESSAGE_ID || '1508162784339165376';
 const MC_LOGS_CHANNEL_ID = process.env.MC_LOGS_CHANNEL_ID || '1487148944667578368';
 
 // إعدادات GitHub من متغيرات البيئة
@@ -347,8 +347,155 @@ function downloadFile(url, filepath) {
     });
 }
 
+function fetchHtmlFromUrl(url) {
+    return new Promise((resolve, reject) => {
+        const protocol = url.startsWith('https') ? https : http;
+        protocol.get(url, (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            res.on('end', () => {
+                if (res.statusCode === 200) {
+                    resolve(data);
+                } else {
+                    reject(new Error(res.statusCode));
+                }
+            });
+        }).on('error', reject);
+    });
+}
+
+async function saveTicketToSupabase(ticketData) {
+    if (!SUPABASE_URL || !SUPABASE_KEY) {
+        return;
+    }
+    try {
+        let empId = null;
+        let empPoints = 0;
+        let empDcPoints = 0;
+        let empName = 'Unassigned';
+        const ptsToAward = ticketData.claimedBy ? 5 : 0;
+        if (ticketData.claimedBy) {
+            const empUrl = new URL(SUPABASE_URL + '/rest/v1/employees?discord_id=eq.' + ticketData.claimedBy);
+            const empRes = await new Promise((resolve) => {
+                const options = {
+                    hostname: empUrl.hostname,
+                    path: empUrl.pathname + empUrl.search,
+                    method: 'GET',
+                    headers: {
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY
+                    }
+                };
+                const req = https.request(options, res => {
+                    let body = '';
+                    res.on('data', c => body += c);
+                    res.on('end', () => {
+                        try { resolve(JSON.parse(body)); } catch(e) { resolve([]); }
+                    });
+                });
+                req.on('error', () => resolve([]));
+                req.end();
+            });
+            if (Array.isArray(empRes) && empRes.length > 0) {
+                const emp = empRes[0];
+                empId = emp.id;
+                empPoints = emp.points || 0;
+                empDcPoints = emp.dc_points || 0;
+                empName = emp.name;
+            }
+        }
+        if (empId && ptsToAward > 0) {
+            const newPoints = empPoints + ptsToAward;
+            const newDcPoints = empDcPoints + ptsToAward;
+            const patchPayload = JSON.stringify({ points: newPoints, dc_points: newDcPoints });
+            const empPatchUrl = new URL(SUPABASE_URL + '/rest/v1/employees?id=eq.' + empId);
+            await new Promise((resolve) => {
+                const options = {
+                    hostname: empPatchUrl.hostname,
+                    path: empPatchUrl.pathname + empPatchUrl.search,
+                    method: 'PATCH',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Content-Length': Buffer.byteLength(patchPayload)
+                    }
+                };
+                const req = https.request(options, res => {
+                    res.on('data', () => {});
+                    res.on('end', () => resolve());
+                });
+                req.on('error', () => resolve());
+                req.write(patchPayload);
+                req.end();
+            });
+            try {
+                const logPayload = JSON.stringify({
+                    action_type: 'Ticket Closed',
+                    details: `Handled ticket ${ticketData.ticketName} (+${ptsToAward} PTS)`,
+                    category: 'Tickets',
+                    user_name: empName,
+                    created_at: new Date().toISOString()
+                });
+                const logUrl = new URL(SUPABASE_URL + '/rest/v1/activity_log');
+                await new Promise((resolve) => {
+                    const options = {
+                        hostname: logUrl.hostname,
+                        path: logUrl.pathname,
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'apikey': SUPABASE_KEY,
+                            'Authorization': 'Bearer ' + SUPABASE_KEY,
+                            'Prefer': 'return=minimal',
+                            'Content-Length': Buffer.byteLength(logPayload)
+                        }
+                    };
+                    const req = https.request(options, () => resolve());
+                    req.on('error', () => resolve());
+                    req.write(logPayload);
+                    req.end();
+                });
+            } catch (e) {}
+        }
+        const ticketPayload = JSON.stringify({
+            ticket_id: ticketData.ticketName,
+            title: ticketData.panelName || 'Support Request',
+            emp_id: empId,
+            status: 'closed',
+            pts: ptsToAward,
+            response_time: ticketData.responseTime || 'N/A',
+            created_at: ticketData.timestamp
+        });
+        const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets');
+        await new Promise((resolve) => {
+            const options = {
+                hostname: insertUrl.hostname,
+                path: insertUrl.pathname,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'apikey': SUPABASE_KEY,
+                    'Authorization': 'Bearer ' + SUPABASE_KEY,
+                    'Prefer': 'return=minimal',
+                    'Content-Length': Buffer.byteLength(ticketPayload)
+                }
+            };
+            const req = https.request(options, res => {
+                res.on('data', () => {});
+                res.on('end', () => resolve());
+            });
+            req.on('error', () => resolve());
+            req.write(ticketPayload);
+            req.end();
+        });
+    } catch (err) {}
+}
+
 // عند تشغيل البوت
-client.once('clientReady', () => {
+client.once('ready', () => {
     console.log('🤖 البوت شغال!');
     console.log(`📝 اسم البوت: ${client.user.tag}`);
     console.log(`📊 يراقب الروم: ${LOGGING_CHANNEL_ID}`);
@@ -788,7 +935,7 @@ client.on('messageCreate', async (message) => {
                     f.name.includes('Ticket Owner') || 
                     f.name.includes('Ticket Name')
                 );
-
+ 
                 if (hasTicketInfo) {
                     console.log('\n📩 تم اكتشاف تكت جديد!');
                     
@@ -808,7 +955,7 @@ client.on('messageCreate', async (message) => {
                     embed.fields.forEach(field => {
                         const fieldName = field.name;
                         const fieldValue = field.value;
-
+ 
                         if (fieldName.includes('Ticket Owner')) {
                             const match = fieldValue.match(/<@(\d+)>/);
                             if (match) {
@@ -824,20 +971,24 @@ client.on('messageCreate', async (message) => {
                                 } catch(e) {}
                             }
                         }
-
+ 
                         if (fieldName.includes('Ticket Name')) {
                             ticketData.ticketName = fieldValue;
                         }
-
+ 
                         if (fieldName.includes('Panel Name')) {
                             ticketData.panelName = fieldValue;
                         }
-
+ 
                         if (fieldName.toLowerCase().includes('claimed') || fieldName.toLowerCase().includes('claim')) {
                             const match = fieldValue.match(/<@!?(\d+)>/);
                             if (match) ticketData.claimedBy = match[1];
                         }
-
+ 
+                        if (fieldName.toLowerCase().includes('response')) {
+                            ticketData.responseTime = fieldValue.replace(/`/g, '').trim();
+                        }
+ 
                         if (fieldName.includes('Users in transcript')) {
                             const userMatches = fieldValue.match(/<@!?\d+>/g);
                             if (userMatches) {
@@ -872,7 +1023,7 @@ client.on('messageCreate', async (message) => {
                                 
                                 // حفظ مسار الملف النسبي
                                 ticketData.transcriptFile = `transcripts/${cleanFileName}`;
-
+ 
                                 // استخراج الكلايمر من محتوى الترانسكربت
                                 const claimMatch = transcriptContent.match(/[Tt]icket claimed by[^\d]*?(\d{15,20})/);
                                 if (claimMatch) {
@@ -892,6 +1043,8 @@ client.on('messageCreate', async (message) => {
                         tickets.unshift(ticketData);
                         saveTickets(tickets);
                         
+                        saveTicketToSupabase(ticketData).catch(() => {});
+                        
                         console.log(`✅ تم حفظ التكت: ${ticketData.ticketName}`);
                         console.log(`📄 الملف: ${ticketData.transcriptFile}`);
                         console.log('---\n');
@@ -900,6 +1053,108 @@ client.on('messageCreate', async (message) => {
                         if (!ticketData.ticketName) console.log('   - اسم التكت ناقص');
                         if (!ticketData.transcriptFile) console.log('   - ملف الترانسكربت ناقص');
                         console.log('---\n');
+                    }
+                }
+            } else {
+                const urlMatch = message.content.match(/https?:\/\/[^\s)\]]+/);
+                const transcriptUrl = urlMatch ? urlMatch[0] : null;
+ 
+                if (transcriptUrl) {
+                    console.log(`📎 تم العثور على رابط ترانسكربت: ${transcriptUrl}`);
+                    
+                    let ticketName = null;
+                    const caseMatch = message.content.match(/Case\s*#(\d+)/i);
+                    if (caseMatch) {
+                        ticketName = `case-${caseMatch[1]}`;
+                    } else {
+                        const channelMatch = message.content.match(/#([a-zA-Z0-9_-]+)/);
+                        if (channelMatch && !channelMatch[1].toLowerCase().includes('transcript')) {
+                            ticketName = channelMatch[1];
+                        } else {
+                            const parts = transcriptUrl.split('/');
+                            ticketName = `ticket-${parts[parts.length - 1]}`;
+                        }
+                    }
+ 
+                    let ticketOwnerId = null;
+                    const ownerMatch = message.content.match(/User:\s*<@!?(\d+)>/i) || message.content.match(/Created by\s*<@!?(\d+)>/i);
+                    if (ownerMatch) {
+                        ticketOwnerId = ownerMatch[1];
+                    } else {
+                        const firstMention = message.content.match(/<@!?(\d+)>/);
+                        if (firstMention) ticketOwnerId = firstMention[1];
+                    }
+ 
+                    let claimedBy = null;
+                    const claimMatch = message.content.match(/Closed By:\s*<@!?(\d+)>/i);
+                    if (claimMatch) {
+                        claimedBy = claimMatch[1];
+                    }
+ 
+                    let panelName = 'Ticket';
+                    if (ticketName && ticketName.includes('-')) {
+                        const firstPart = ticketName.split('-')[0];
+                        panelName = firstPart.charAt(0).toUpperCase() + firstPart.slice(1);
+                    }
+ 
+                    const userMatches = message.content.match(/<@!?\d+>/g);
+                    const users = userMatches ? [...new Set(userMatches)] : [];
+ 
+                    const ticketData = {
+                        timestamp: new Date().toISOString(),
+                        ticketOwner: ticketOwnerId ? `<@${ticketOwnerId}>` : null,
+                        ticketOwnerId: ticketOwnerId,
+                        ticketName: ticketName,
+                        panelName: panelName,
+                        transcriptFile: null,
+                        claimedBy: claimedBy,
+                        users: users,
+                        responseTime: 'N/A'
+                    };
+ 
+                    if (ticketOwnerId) {
+                        try {
+                            const member = message.guild.members.cache.get(ticketOwnerId);
+                            if (member) {
+                                ticketData.ticketOwnerName = member.user.username;
+                                ticketData.ticketOwnerDisplay = member.displayName;
+                            }
+                        } catch(E) {}
+                    }
+ 
+                    try {
+                        console.log('⬇️ جاري تحميل الترانسكربت من الرابط...');
+                        const cleanFileName = `${ticketName}.html`.replace(/[^a-zA-Z0-9.-]/g, '_');
+                        const filePath = path.join(TRANSCRIPTS_FOLDER, cleanFileName);
+                        
+                        const transcriptContent = await fetchHtmlFromUrl(transcriptUrl);
+                        fs.writeFileSync(filePath, transcriptContent, 'utf8');
+                        console.log(`✅ تم تحميل وحفظ الملف: ${cleanFileName}`);
+                        
+                        await uploadTranscriptToGitHub(cleanFileName, transcriptContent);
+                        ticketData.transcriptFile = `transcripts/${cleanFileName}`;
+                        
+                        if (!ticketData.claimedBy) {
+                            const claimMatchInner = transcriptContent.match(/[Tt]icket claimed by[^\d]*?(\d{15,20})/);
+                            if (claimMatchInner) {
+                                ticketData.claimedBy = claimMatchInner[1];
+                                console.log(`✅ الكلايمر من الترانسكربت: ${ticketData.claimedBy}`);
+                            }
+                        }
+                        
+                        if (ticketData.ticketName && ticketData.transcriptFile) {
+                            const tickets = loadTickets();
+                            tickets.unshift(ticketData);
+                            saveTickets(tickets);
+                            
+                            await saveTicketToSupabase(ticketData);
+                            
+                            console.log(`✅ تم حفظ التكت: ${ticketData.ticketName}`);
+                            console.log(`📄 الملف: ${ticketData.transcriptFile}`);
+                            console.log('---\n');
+                        }
+                    } catch (error) {
+                        console.error('❌ خطأ في معالجة الترانسكربت النصي:', error.message);
                     }
                 }
             }
