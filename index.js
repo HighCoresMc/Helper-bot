@@ -3,6 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
+const cheerio = require('cheerio');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 // Config
@@ -381,6 +383,93 @@ async function lookupEmployee(identifier) {
     });
 }
 
+// Extracts raw text from HTML transcript for the AI
+function extractTextFromTranscript(html) {
+    const $ = cheerio.load(html);
+    let messages = [];
+    $('.chatlog__message-group').each((i, group) => {
+        const author = $(group).find('.chatlog__author').text().trim();
+        $(group).find('.chatlog__message').each((j, msg) => {
+            const content = $(msg).find('.chatlog__markdown').text().trim();
+            if (author && content) {
+                messages.push(`${author}: ${content}`);
+            }
+        });
+    });
+    return messages.join('\n');
+}
+
+// AI Analysis function
+async function analyzeTicketWithAI(transcriptHtml, handlerName) {
+    if (!process.env.GEMINI_API_KEY) {
+        console.log("⚠️ GEMINI_API_KEY is not set in .env. Defaulting to 5 points.");
+        return { totalPoints: 5, breakdown: { error: "No API Key" }, reasoning: "API key missing" };
+    }
+
+    try {
+        const transcriptText = extractTextFromTranscript(transcriptHtml);
+        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+        // Using standard flash model
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", generationConfig: { responseMimeType: "application/json" } });
+
+        const prompt = `
+You are an expert AI evaluating a Discord admin's performance in a support ticket.
+The admin's name is "${handlerName}".
+Read the following transcript and calculate their points based ONLY on these rules:
+
+1. Ticket Type (ID 20):
+- Claiming the ticket (default) = +2 pts
+- Whitelist ticket handled professionally/perfectly = +5 pts
+- Support ticket handled professionally = +7 pts
+- Team ticket handled professionally & fast = +10 pts
+- Complaint ticket handled professionally = +4 pts
+(Pick the ONE best fit for the overall ticket type and handling quality)
+
+2. Responses (ID 21):
+- Official/formal response = +2 pts
+- Helpful and explanatory response = +3 pts
+- Trolling or unhelpful response = -4 pts
+(Pick the ONE best fit based on their replies)
+
+3. Ticket Level/Speed (ID 22):
+- Handled easy ticket in < 10 mins = +4 pts
+- Handled hard ticket in < 10 mins = +8 pts
+- Handled ticket (general) in < 30 mins = +2 pts
+- Handled any ticket > 1 hour = -4 pts
+(Pick the ONE best fit. Guess the speed/difficulty based on the conversation if timestamps aren't fully clear).
+
+Return ONLY a JSON object with this exact structure:
+{
+  "ticket_type_points": 0,
+  "responses_points": 0,
+  "level_speed_points": 0,
+  "total_points": 0,
+  "reasoning": "Short explanation of why these points were awarded"
+}
+
+Transcript:
+${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
+`;
+        
+        const result = await model.generateContent(prompt);
+        const response = result.response.text();
+        const json = JSON.parse(response);
+        
+        // Sum points safely just in case AI didn't
+        const total = (json.ticket_type_points || 0) + (json.responses_points || 0) + (json.level_speed_points || 0);
+        json.total_points = total;
+        
+        return {
+            totalPoints: total || 5, // Fallback to 5 if 0 or error
+            breakdown: json,
+            reasoning: json.reasoning || "Analyzed successfully"
+        };
+    } catch (e) {
+        console.error("❌ AI Analysis failed:", e.message);
+        return { totalPoints: 5, breakdown: { error: e.message }, reasoning: "AI Error: " + e.message };
+    }
+}
+
 // Supabase — Save Ticket
 async function saveTicketToSupabase(ticketData) {
     if (!SUPABASE_URL || !SUPABASE_KEY) return;
@@ -509,24 +598,43 @@ async function saveTicketToSupabase(ticketData) {
             }
         }
 
-        const ptsToAward = resolvedClaimedBy ? 5 : 0;
-
         if (emp) {
             empId = emp.id;
-            empPoints = (emp.points || 0) + ptsToAward;
-            empDcPoints = (emp.discord_points || 0) + ptsToAward;
-            // if newEmp was created, tickets is 0 + 1 = 1. if existing, tickets_handled or tickets
-            let currentTickets = emp.tickets_handled !== undefined ? emp.tickets_handled : (emp.tickets || 0);
-            empTickets = currentTickets + 1;
+            empPoints = emp.points || 0;
+            empDcPoints = emp.dc_points || 0;
+            empTickets = emp.tickets || 0;
             empName = emp.name;
-        } else if (resolvedClaimedBy) {
+        } else {
             console.log(`⚠️ Employee not found for: ${resolvedClaimedBy}`);
         }
 
-        if (empId && ptsToAward > 0) {
+        // --- AI Analysis ---
+        let ptsToAward = 0;
+        let aiReasoning = "Ticket Closed";
+        let aiBreakdown = {};
+
+        if (resolvedClaimedBy) {
+            console.log(`🤖 Starting AI Transcript Analysis for ${empName}...`);
+            const html = await fetchHtmlFromUrl(ticketData.transcriptUrl);
+            if (html) {
+                const aiResult = await analyzeTicketWithAI(html, empName);
+                ptsToAward = aiResult.totalPoints;
+                aiReasoning = aiResult.reasoning;
+                aiBreakdown = aiResult.breakdown;
+                console.log(`✅ AI Analysis complete! Awarded ${ptsToAward} points. Reasoning: ${aiReasoning}`);
+            } else {
+                console.log(`⚠️ Could not fetch transcript HTML. Defaulting to 5 points.`);
+                ptsToAward = 5;
+            }
+        }
+
+        if (empId && ptsToAward !== 0) {
             const newPoints = empPoints + ptsToAward;
             const newDcPoints = empDcPoints + ptsToAward;
-            const newTickets = empTickets + 1;
+            // if newEmp was created, tickets is 0 + 1 = 1. if existing, tickets_handled or tickets
+            let currentTickets = empTickets !== undefined ? empTickets : 0;
+            const newTickets = currentTickets + 1;
+            
             const patchPayload = JSON.stringify({ points: newPoints, dc_points: newDcPoints, tickets: newTickets });
             const empPatchUrl = new URL(SUPABASE_URL + '/rest/v1/employees?id=eq.' + empId);
             await new Promise((resolve) => {
@@ -552,8 +660,8 @@ async function saveTicketToSupabase(ticketData) {
 
             try {
                 const logPayload = JSON.stringify({
-                    action_type: 'Ticket Closed',
-                    details: `Handled ticket ${ticketData.ticketName} (+${ptsToAward} PTS)`,
+                    action_type: 'Ticket Closed (AI Analyzed)',
+                    details: `Handled ticket ${ticketData.ticketName} (+${ptsToAward} PTS). Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. AI Note: ${aiReasoning}`,
                     category: 'Tickets',
                     user_name: empName,
                     created_at: new Date().toISOString()
@@ -1108,8 +1216,8 @@ client.on('messageCreate', async (message) => {
                 transcriptUrl = transcriptUrl || embed.url;
             }
             if (embed.fields) {
-                embed.fields.forEach(f => {
-                    fullText += '\n' + (f.name || '') + '\n' + (f.value || '');
+                embed.fields.forEach(F => {
+                    fullText += '\n' + (F.name || '') + '\n' + (F.value || '');
                 });
             }
         }
