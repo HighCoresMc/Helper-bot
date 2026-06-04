@@ -407,9 +407,7 @@ async function analyzeTicketWithAI(transcriptHtml, handlerName) {
     try {
         const transcriptText = extractTextFromTranscript(transcriptHtml);
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        // Using standard flash model
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", generationConfig: { responseMimeType: "application/json" } });
-
+        
         const prompt = `
 You are an expert AI evaluating a Discord admin's performance in a support ticket.
 The admin's name is "${handlerName}".
@@ -449,19 +447,31 @@ Transcript:
 ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 `;
 
-        let result;
-        try {
-            result = await model.generateContent(prompt);
-        } catch (e) {
-            console.log("⚠️ Failed with gemini-1.5-flash-latest, trying fallback gemini-pro...");
-            const fallbackModel = genAI.getGenerativeModel({ model: "gemini-pro" });
-            result = await fallbackModel.generateContent(prompt);
+        let responseText = null;
+        const modelsToTry = [
+            "gemini-2.5-flash",
+            "gemini-2.5-flash-lite",
+            "gemini-1.5-flash"
+        ];
+
+        for (const modelName of modelsToTry) {
+            try {
+                const currentModel = genAI.getGenerativeModel({ model: modelName, generationConfig: { responseMimeType: "application/json" } });
+                const result = await currentModel.generateContent(prompt);
+                responseText = result.response.text();
+                break; // Success! Break out of the loop
+            } catch (e) {
+                console.log(`⚠️ Failed with ${modelName}, trying next...`);
+            }
+        }
+
+        if (!responseText) {
+            console.log("❌ All Gemini models failed.");
+            return { totalPoints: 5, breakdown: { error: "All models failed" }, reasoning: "AI Error: All models failed" };
         }
         
-        let response = result.response.text();
-        
         // Clean up response if it contains markdown (like ```json ... ```)
-        response = response.replace(/```json/gi, '').replace(/```/g, '').trim();
+        let response = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
         
         const json = JSON.parse(response);
 
