@@ -260,22 +260,61 @@ function fetchHtmlFromUrl(url) {
     });
 }
 
+// Helpers — Extract Ticket Opener ID from first message mention
+function extractTicketOpenerId(transcriptContent) {
+    const mentionRegex = /<@!?(\d{17,19})>/;
+    const match = transcriptContent.match(mentionRegex);
+    if (match) return match[1];
+    
+    // Fallback: look for mention class
+    const spanMatch = transcriptContent.match(/title="[^"]*\(ID:\s*(\d{17,19})\)"/);
+    if (spanMatch) return spanMatch[1];
+    
+    return null;
+}
+
 // Helpers — Extract Handler From Transcript
 function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
     const botNames = ['highcore mc', 'highcoremc', 'high core mc'];
-    const seen = new Set();
+    const seenIds = new Set();
     const handlers = [];
-    const regex = /class=['"]uname['"][^>]*>([^<]+)</g;
+    
+    const openerId = extractTicketOpenerId(transcriptContent);
+
+    // Try extracting by data-user-id first (more accurate)
+    const idRegex = /data-user-id=['"](\d{17,19})['"][^>]*>([^<]+)</g;
     let m;
-    while ((m = regex.exec(transcriptContent)) !== null) {
-        const name = m[1].trim();
-        if (seen.has(name)) continue;
-        seen.add(name);
+    let foundIds = false;
+    while ((m = idRegex.exec(transcriptContent)) !== null) {
+        const id = m[1];
+        const name = m[2].trim();
+        foundIds = true;
+        
+        if (seenIds.has(id)) continue;
+        seenIds.add(id);
+        
+        if (id === openerId) continue;
         if (botNames.some(b => name.toLowerCase().includes(b))) continue;
         if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
-        handlers.push(name);
+        
+        handlers.push(id); // Prefer returning ID directly
     }
-    return handlers[0] || null;
+
+    if (handlers.length > 0) return handlers[0];
+
+    // Fallback to name if data-user-id not found
+    const seenNames = new Set();
+    const nameHandlers = [];
+    const nameRegex = /class=['"]uname['"][^>]*>([^<]+)</g;
+    while ((m = nameRegex.exec(transcriptContent)) !== null) {
+        const name = m[1].trim();
+        if (seenNames.has(name)) continue;
+        seenNames.add(name);
+        if (botNames.some(b => name.toLowerCase().includes(b))) continue;
+        if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
+        nameHandlers.push(name);
+    }
+    return nameHandlers[0] || null;
 }
 
 // Helpers — Extract Opened At From Transcript
@@ -373,10 +412,16 @@ async function saveTicketToSupabase(ticketData) {
 
         // Also try handler from transcript if still not resolved
         if (!resolvedClaimedBy && ticketData.handlerUsername) {
-            const resolvedId = await resolveDisplayNameToDiscordId(ticketData.handlerUsername);
-            if (resolvedId) {
-                console.log(`🔍 Resolved handler "${ticketData.handlerUsername}" → discord_id: ${resolvedId}`);
-                resolvedClaimedBy = resolvedId;
+            const isDiscordId = /^\d{15,22}$/.test(ticketData.handlerUsername);
+            if (isDiscordId) {
+                resolvedClaimedBy = ticketData.handlerUsername;
+                console.log(`🔍 Handler from transcript is already discord_id: ${resolvedClaimedBy}`);
+            } else {
+                const resolvedId = await resolveDisplayNameToDiscordId(ticketData.handlerUsername);
+                if (resolvedId) {
+                    console.log(`🔍 Resolved handler "${ticketData.handlerUsername}" → discord_id: ${resolvedId}`);
+                    resolvedClaimedBy = resolvedId;
+                }
             }
         }
 
