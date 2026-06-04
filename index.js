@@ -542,6 +542,7 @@ async function saveTicketToSupabase(ticketData) {
             status: 'closed',
             pts: ptsToAward,
             response_time: ticketData.responseTime || 'N/A',
+            transcript_url: ticketData.transcriptUrl || null,
             created_at: ticketData.timestamp
         });
         const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets');
@@ -971,28 +972,33 @@ function extractTicketOwner(fullText) {
 }
 
 function extractClaimedBy(fullText, transcriptContent) {
+    // Closed/Claimed/Handled by with Discord mention
     let match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[^\d<:]*[:\s]*<@!?(\d+)>/i);
     if (match) return match[1];
 
-    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[^\d]*(\d{15,22})/i);
+    // Closed/Claimed/Handled by with raw Discord ID
+    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y\s*[:\s]*(\d{15,22})/i);
     if (match) return match[1];
 
-    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[^\d<:]*[:\s]*@?([^\n\r(]+)/i);
+    // Closed/Claimed/Handled by with display name (non-ID, non-mention)
+    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y\s*[:\s]+([^\n\r<@\d(][^\n\r(]{2,})/i);
     if (match) {
-        const name = match[1].trim();
-        if (name && name.length > 2 && !name.toLowerCase().includes('unknown')) {
+        const name = match[1].trim().split('\n')[0].trim();
+        if (name && name.length > 2 && !name.toLowerCase().includes('unknown') && !name.toLowerCase().includes('ticket')) {
             return name;
         }
     }
 
+    // Search inside transcript HTML
     if (transcriptContent) {
-        match = transcriptContent.match(/[Tt]icket claimed by[^\d]*?(\d{15,20})/);
+        match = transcriptContent.match(/[Tt]icket\s+claimed\s+by[^\d]*?(\d{15,20})/);
         if (match) return match[1];
 
-        match = transcriptContent.match(/[Cc]losed by[^\d]*?(\d{15,20})/);
+        match = transcriptContent.match(/[Cc]losed\s+by[^\d]*?(\d{15,20})/);
         if (match) return match[1];
     }
 
+    // No handler found — do not fall back to ticket owner
     return null;
 }
 
@@ -1078,8 +1084,8 @@ client.on('messageCreate', async (message) => {
                 transcriptUrl = transcriptUrl || embed.url;
             }
             if (embed.fields) {
-                embed.fields.forEach(F => {
-                    fullText += '\n' + (F.name || '') + '\n' + (F.value || '');
+                embed.fields.forEach(f => {
+                    fullText += '\n' + (f.name || '') + '\n' + (f.value || '');
                 });
             }
         }
@@ -1153,6 +1159,7 @@ client.on('messageCreate', async (message) => {
                 ticketName: ticketName,
                 panelName: panelName,
                 transcriptFile: finalTranscriptPath,
+                transcriptUrl: transcriptUrl || null,
                 claimedBy: claimedBy,
                 users: users,
                 responseTime: 'N/A'
