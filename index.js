@@ -449,83 +449,78 @@ async function saveTicketToSupabase(ticketData) {
             }
         }
 
+        if (!emp && resolvedClaimedBy) {
+            // Auto-create if it's a discord ID with staff role
+            const isDiscordId = /^\d{15,22}$/.test(resolvedClaimedBy);
+            if (isDiscordId) {
+                try {
+                    const guild = client.guilds.cache.get(GUILD_ID);
+                    if (guild) {
+                        const member = await guild.members.fetch(resolvedClaimedBy).catch(() => null);
+                        if (member && typeof STAFF_ROLE_ID !== 'undefined' && member.roles.cache.has(STAFF_ROLE_ID)) {
+                            const newId = Math.floor(100000000 + Math.random() * 900000000);
+                            const displayName = member.displayName;
+                            const newEmp = {
+                                id: newId,
+                                name: displayName,
+                                discord_id: resolvedClaimedBy,
+                                points: 0,
+                                dc_points: 0,
+                                mc_points: 0,
+                                tickets: 0,
+                                role: 'Staff',
+                                avatar: displayName.charAt(0).toUpperCase() || 'S',
+                                color: '#5C9EFF',
+                                section: JSON.stringify({
+                                    job_titles: [{ title: 'Staff', is_main: true }],
+                                    rank_override: null
+                                })
+                            };
+                            const insertEmpUrl = new URL(SUPABASE_URL + '/rest/v1/employees');
+                            const insertPayload = JSON.stringify(newEmp);
+                            await new Promise((resolveInsert) => {
+                                const options = {
+                                    hostname: insertEmpUrl.hostname,
+                                    path: insertEmpUrl.pathname,
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'apikey': SUPABASE_KEY,
+                                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                                        'Prefer': 'return=minimal',
+                                        'Content-Length': Buffer.byteLength(insertPayload)
+                                    }
+                                };
+                                const req = https.request(options, res => {
+                                    res.on('data', () => {});
+                                    res.on('end', () => resolveInsert());
+                                });
+                                req.on('error', () => resolveInsert());
+                                req.write(insertPayload);
+                                req.end();
+                            });
+                            emp = newEmp;
+                            console.log(`✅ Auto-created employee: ${displayName}`);
+                        }
+                    }
+                } catch (e) {
+                    console.error('Auto-create employee error:', e.message);
+                }
+            }
+        }
+
         const ptsToAward = resolvedClaimedBy ? 5 : 0;
 
-        if (resolvedClaimedBy && emp) {
+        if (emp) {
             empId = emp.id;
             empPoints = (emp.points || 0) + ptsToAward;
             empDcPoints = (emp.discord_points || 0) + ptsToAward;
-            empTickets = (emp.tickets_handled || 0) + 1;
+            // if newEmp was created, tickets is 0 + 1 = 1. if existing, tickets_handled or tickets
+            let currentTickets = emp.tickets_handled !== undefined ? emp.tickets_handled : (emp.tickets || 0);
+            empTickets = currentTickets + 1;
             empName = emp.name;
         } else if (resolvedClaimedBy) {
-                // Auto-create if it's a discord ID with staff role
-                const isDiscordId = /^\d{15,22}$/.test(resolvedClaimedBy);
-                if (isDiscordId) {
-                    try {
-                        const guild = client.guilds.cache.get(GUILD_ID);
-                        if (guild) {
-                            const member = await guild.members.fetch(resolvedClaimedBy).catch(() => null);
-                            if (member && member.roles.cache.has(STAFF_ROLE_ID)) {
-                                const newId = Math.floor(100000000 + Math.random() * 900000000);
-                                const displayName = member.displayName;
-                                const newEmp = {
-                                    id: newId,
-                                    name: displayName,
-                                    discord_id: resolvedClaimedBy,
-                                    points: 0,
-                                    dc_points: 0,
-                                    mc_points: 0,
-                                    tickets: 0,
-                                    role: 'Staff',
-                                    avatar: displayName.charAt(0).toUpperCase() || 'S',
-                                    color: '#5C9EFF',
-                                    section: JSON.stringify({
-                                        job_titles: [{ title: 'Staff', is_main: true }],
-                                        rank_override: null
-                                    })
-                                };
-                                const insertEmpUrl = new URL(SUPABASE_URL + '/rest/v1/employees');
-                                const insertPayload = JSON.stringify(newEmp);
-                                await new Promise((resolveInsert) => {
-                                    const options = {
-                                        hostname: insertEmpUrl.hostname,
-                                        path: insertEmpUrl.pathname,
-                                        method: 'POST',
-                                        headers: {
-                                            'Content-Type': 'application/json',
-                                            'apikey': SUPABASE_KEY,
-                                            'Authorization': 'Bearer ' + SUPABASE_KEY,
-                                            'Prefer': 'return=minimal',
-                                            'Content-Length': Buffer.byteLength(insertPayload)
-                                        }
-                                    };
-                                    const req = https.request(options, res => {
-                                        res.on('data', () => {});
-                                        res.on('end', () => resolveInsert());
-                                    });
-                                    req.on('error', () => resolveInsert());
-                                    req.write(insertPayload);
-                                    req.end();
-                                });
-                                emp = newEmp;
-                                console.log(`✅ Auto-created employee: ${displayName}`);
-                            }
-                        }
-                    } catch (e) {
-                        console.error('Auto-create employee error:', e.message);
-                    }
-                }
-            }
-
-            if (emp) {
-                empId = emp.id;
-                empPoints = emp.points || 0;
-                empDcPoints = emp.dc_points || 0;
-                empTickets = emp.tickets || 0;
-                empName = emp.name;
-            } else {
-                console.log(`⚠️ Employee not found for: ${resolvedClaimedBy}`);
-            }
+            console.log(`⚠️ Employee not found for: ${resolvedClaimedBy}`);
         }
 
         if (empId && ptsToAward > 0) {
