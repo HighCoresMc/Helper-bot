@@ -1153,7 +1153,11 @@ client.on('messageCreate', async (message) => {
                 if (titleMatch) {
                     let title = titleMatch[1].toLowerCase().trim();
                     if (title.includes(' - ')) title = title.split(' - ').pop().trim();
+                    
                     let handlerStr = title.replace(/^(support|ticket|case|closed)(-\d+)?-?/i, '').trim();
+                    
+                    // Remove suffixes like -c, -closed
+                    handlerStr = handlerStr.replace(/-c$/i, '').replace(/-closed$/i, '').trim();
                     
                     // Remove special characters (like ༃) so exact matching works
                     handlerStr = handlerStr.replace(/[^\w\s-]/g, '').trim();
