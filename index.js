@@ -576,7 +576,7 @@ async function saveTicketToSupabase(ticketData) {
                         'Content-Type': 'application/json',
                         'apikey': SUPABASE_KEY,
                         'Authorization': 'Bearer ' + SUPABASE_KEY,
-                        'Prefer': 'return=minimal',
+                        'Prefer': 'return=minimal, resolution=merge-duplicates',
                         'Content-Length': Buffer.byteLength(payloadStr)
                     }
                 };
