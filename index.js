@@ -396,7 +396,7 @@ async function saveTicketToSupabase(ticketData) {
         let empDcPoints = 0;
         let empTickets = 0;
         let empName = 'Unassigned';
-        let resolvedClaimedBy = ticketData.claimedBy || null;
+        let resolvedClaimedBy = ticketData.handlerUsername || ticketData.claimedBy || null;
 
         // Resolution chain: display name → discord_id → employee lookup
         if (resolvedClaimedBy) {
@@ -1143,7 +1143,9 @@ client.on('messageCreate', async (message) => {
             const claimedBy = extractClaimedBy(fullText);
 
             // Transcript-based data extraction
-            const openedAt = transcriptContent ? extractTicketOpenedAt(transcriptContent) : null;
+            let openedAt = transcriptContent ? extractTicketOpenedAt(transcriptContent) : null;
+            if (!openedAt) openedAt = new Date().toISOString();
+            
             const openedByUsername = transcriptContent ? extractOpenedByUsername(transcriptContent) : null;
 
             // Extract channel name from HTML title to find the handler
