@@ -260,66 +260,150 @@ function fetchHtmlFromUrl(url) {
     });
 }
 
+// Helpers — Extract Handler From Transcript
+function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
+    const botNames = ['highcore mc', 'highcoremc', 'high core mc'];
+    const seen = new Set();
+    const handlers = [];
+    const regex = /class=['"]uname['"][^>]*>([^<]+)</g;
+    let m;
+    while ((m = regex.exec(transcriptContent)) !== null) {
+        const name = m[1].trim();
+        if (seen.has(name)) continue;
+        seen.add(name);
+        if (botNames.some(b => name.toLowerCase().includes(b))) continue;
+        if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
+        handlers.push(name);
+    }
+    return handlers[0] || null;
+}
+
+// Helpers — Extract Opened At From Transcript
+function extractTicketOpenedAt(transcriptContent) {
+    const m = transcriptContent.match(/Opened At<\/div>\s*<div[^>]*>([^<]+)</);
+    if (!m) return null;
+    const raw = m[1].trim().replace('\u00b7', '').replace(/\s+/g, ' ').trim();
+    const parsed = new Date(raw);
+    if (isNaN(parsed.getTime())) return null;
+    return new Date(parsed.getTime() - 3 * 60 * 60 * 1000).toISOString();
+}
+
+// Helpers — Extract Opened By Username From Transcript
+function extractOpenedByUsername(transcriptContent) {
+    const m = transcriptContent.match(/Opened By<\/div>\s*<div[^>]*>([^<]+)</);
+    return m ? m[1].trim() : null;
+}
+
+// Helpers — Format Response Time
+function formatResponseTime(openedAtISO) {
+    if (!openedAtISO) return 'N/A';
+    const diffMs = Date.now() - new Date(openedAtISO).getTime();
+    if (diffMs < 0) return 'N/A';
+    const totalMins = Math.floor(diffMs / 60000);
+    const hours = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    if (hours > 0) return `${hours}h ${mins}m`;
+    return `${mins}m`;
+}
+
+// Helpers — Resolve Display Name to Discord ID via Guild
+async function resolveDisplayNameToDiscordId(displayName) {
+    try {
+        const guild = client.guilds.cache.get(GUILD_ID);
+        if (!guild) return null;
+        const clean = displayName.replace(/^@/, '').trim().toLowerCase();
+        const member = guild.members.cache.find(m =>
+            m.displayName.toLowerCase() === clean ||
+            m.user.username.toLowerCase() === clean ||
+            m.displayName.toLowerCase().includes(clean) ||
+            clean.includes(m.displayName.toLowerCase())
+        );
+        return member ? member.id : null;
+    } catch (e) {
+        return null;
+    }
+}
+
+// Supabase — Lookup Employee
+async function lookupEmployee(identifier) {
+    const isDiscordId = /^\d{15,22}$/.test(identifier);
+    let empPath = isDiscordId
+        ? '/rest/v1/employees?discord_id=eq.' + identifier
+        : '/rest/v1/employees?name=ilike.' + encodeURIComponent(identifier.replace(/^@/, '').trim());
+    const empUrl = new URL(SUPABASE_URL + empPath);
+    return new Promise((resolve) => {
+        const options = {
+            hostname: empUrl.hostname,
+            path: empUrl.pathname + empUrl.search,
+            method: 'GET',
+            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
+        };
+        const req = https.request(options, res => {
+            let body = '';
+            res.on('data', c => body += c);
+            res.on('end', () => { try { resolve(JSON.parse(body)); } catch(e) { resolve([]); } });
+        });
+        req.on('error', () => resolve([]));
+        req.end();
+    });
+}
+
 // Supabase — Save Ticket
 async function saveTicketToSupabase(ticketData) {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-        return;
-    }
+    if (!SUPABASE_URL || !SUPABASE_KEY) return;
     try {
         let empId = null;
         let empPoints = 0;
         let empDcPoints = 0;
         let empTickets = 0;
         let empName = 'Unassigned';
-        const ptsToAward = ticketData.claimedBy ? 5 : 0;
+        let resolvedClaimedBy = ticketData.claimedBy || null;
 
-        if (ticketData.claimedBy) {
-            const isDiscordId = /^\d{15,22}$/.test(ticketData.claimedBy);
-            let empPath = '/rest/v1/employees?discord_id=eq.' + ticketData.claimedBy;
+        // Resolution chain: display name → discord_id → employee lookup
+        if (resolvedClaimedBy) {
+            const isDiscordId = /^\d{15,22}$/.test(resolvedClaimedBy);
             if (!isDiscordId) {
-                const cleanName = ticketData.claimedBy.replace(/^@/, '').trim();
-                empPath = '/rest/v1/employees?name=ilike.' + encodeURIComponent(cleanName);
+                const resolvedId = await resolveDisplayNameToDiscordId(resolvedClaimedBy);
+                if (resolvedId) {
+                    console.log(`🔍 Resolved "${resolvedClaimedBy}" → discord_id: ${resolvedId}`);
+                    resolvedClaimedBy = resolvedId;
+                }
             }
-            const empUrl = new URL(SUPABASE_URL + empPath);
+        }
 
-            const empRes = await new Promise((resolve) => {
-                const options = {
-                    hostname: empUrl.hostname,
-                    path: empUrl.pathname + empUrl.search,
-                    method: 'GET',
-                    headers: {
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY
-                    }
-                };
-                const req = https.request(options, res => {
-                    let body = '';
-                    res.on('data', c => body += c);
-                    res.on('end', () => {
-                        try { resolve(JSON.parse(body)); } catch(e) { resolve([]); }
-                    });
-                });
-                req.on('error', () => resolve([]));
-                req.end();
-            });
+        // Also try handler from transcript if still not resolved
+        if (!resolvedClaimedBy && ticketData.handlerUsername) {
+            const resolvedId = await resolveDisplayNameToDiscordId(ticketData.handlerUsername);
+            if (resolvedId) {
+                console.log(`🔍 Resolved handler "${ticketData.handlerUsername}" → discord_id: ${resolvedId}`);
+                resolvedClaimedBy = resolvedId;
+            }
+        }
+
+        const ptsToAward = resolvedClaimedBy ? 5 : 0;
+
+        if (resolvedClaimedBy) {
+            let empRes = await lookupEmployee(resolvedClaimedBy);
 
             let emp = null;
             if (Array.isArray(empRes) && empRes.length > 0) {
                 emp = empRes[0];
-            } else if (isDiscordId) {
-                try {
-                    const guild = client.guilds.cache.get(GUILD_ID);
-                    if (guild) {
-                        const member = await guild.members.fetch(ticketData.claimedBy);
-                        if (member) {
-                            const hasStaffRole = member.roles.cache.has(STAFF_ROLE_ID);
-                            if (hasStaffRole) {
+                console.log(`✅ Found employee: ${emp.name} (id: ${emp.id})`);
+            } else {
+                // Auto-create if it's a discord ID with staff role
+                const isDiscordId = /^\d{15,22}$/.test(resolvedClaimedBy);
+                if (isDiscordId) {
+                    try {
+                        const guild = client.guilds.cache.get(GUILD_ID);
+                        if (guild) {
+                            const member = await guild.members.fetch(resolvedClaimedBy).catch(() => null);
+                            if (member && member.roles.cache.has(STAFF_ROLE_ID)) {
                                 const newId = Math.floor(100000000 + Math.random() * 900000000);
                                 const displayName = member.displayName;
                                 const newEmp = {
                                     id: newId,
                                     name: displayName,
-                                    discord_id: ticketData.claimedBy,
+                                    discord_id: resolvedClaimedBy,
                                     points: 0,
                                     dc_points: 0,
                                     mc_points: 0,
@@ -356,11 +440,12 @@ async function saveTicketToSupabase(ticketData) {
                                     req.end();
                                 });
                                 emp = newEmp;
+                                console.log(`✅ Auto-created employee: ${displayName}`);
                             }
                         }
+                    } catch (e) {
+                        console.error('Auto-create employee error:', e.message);
                     }
-                } catch (e) {
-                    console.error(e);
                 }
             }
 
@@ -370,6 +455,8 @@ async function saveTicketToSupabase(ticketData) {
                 empDcPoints = emp.dc_points || 0;
                 empTickets = emp.tickets || 0;
                 empName = emp.name;
+            } else {
+                console.log(`⚠️ Employee not found for: ${resolvedClaimedBy}`);
             }
         }
 
@@ -430,45 +517,56 @@ async function saveTicketToSupabase(ticketData) {
             } catch (e) {}
         }
 
-        const ticketPayload = JSON.stringify({
+        const closedAt = new Date().toISOString();
+
+        const doInsert = (payload) => {
+            const payloadStr = JSON.stringify(payload);
+            const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets');
+            return new Promise((resolve) => {
+                const options = {
+                    hostname: insertUrl.hostname,
+                    path: insertUrl.pathname,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'apikey': SUPABASE_KEY,
+                        'Authorization': 'Bearer ' + SUPABASE_KEY,
+                        'Prefer': 'return=minimal',
+                        'Content-Length': Buffer.byteLength(payloadStr)
+                    }
+                };
+                const req = https.request(options, res => {
+                    let body = '';
+                    res.on('data', c => body += c);
+                    res.on('end', () => resolve({ status: res.statusCode, body }));
+                });
+                req.on('error', (e) => { console.error('❌ Supabase INSERT network error:', e.message); resolve({ status: 0, body: '' }); });
+                req.write(payloadStr);
+                req.end();
+            });
+        };
+
+        const basePayload = {
             ticket_id: ticketData.ticketName,
             title: ticketData.panelName || 'Support Request',
             emp_id: empId,
             status: 'closed',
             pts: ptsToAward,
             response_time: ticketData.responseTime || 'N/A',
-            created_at: ticketData.timestamp
-        });
-        const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets');
-        await new Promise((resolve) => {
-            const options = {
-                hostname: insertUrl.hostname,
-                path: insertUrl.pathname,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'apikey': SUPABASE_KEY,
-                    'Authorization': 'Bearer ' + SUPABASE_KEY,
-                    'Prefer': 'return=minimal',
-                    'Content-Length': Buffer.byteLength(ticketPayload)
-                }
-            };
-            const req = https.request(options, res => {
-                let body = '';
-                res.on('data', c => body += c);
-                res.on('end', () => {
-                    if (res.statusCode >= 400) {
-                        console.error('❌ Supabase tickets INSERT failed:', res.statusCode, body);
-                    } else {
-                        console.log('✅ Ticket saved to Supabase');
-                    }
-                    resolve();
-                });
-            });
-            req.on('error', (e) => { console.error('❌ Supabase INSERT network error:', e.message); resolve(); });
-            req.write(ticketPayload);
-            req.end();
-        });
+            created_at: ticketData.openedAt || ticketData.timestamp
+        };
+
+        // Try with closed_at first; if column missing, retry without it
+        let result = await doInsert({ ...basePayload, closed_at: closedAt });
+        if (result.status >= 400 && result.body.includes('closed_at')) {
+            console.log('⚠️ closed_at column missing — retrying without it (add it in Supabase SQL Editor)');
+            result = await doInsert(basePayload);
+        }
+        if (result.status >= 400) {
+            console.error('❌ Supabase tickets INSERT failed:', result.status, result.body);
+        } else {
+            console.log(`✅ Ticket saved to Supabase — emp: ${empName}, pts: ${ptsToAward}`);
+        }
     } catch (err) {
         console.error('❌ saveTicketToSupabase error:', err.message);
     }
@@ -847,7 +945,7 @@ function extractTicketOwner(fullText) {
 }
 
 // Helpers — Extract Claimed By
-function extractClaimedBy(fullText, transcriptContent) {
+function extractClaimedBy(fullText) {
     let match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[^\d<:]*[:\s]*<@!?(\d+)>/i);
     if (match) return match[1];
 
@@ -860,14 +958,6 @@ function extractClaimedBy(fullText, transcriptContent) {
         if (name && name.length > 2 && !name.toLowerCase().includes('unknown') && !name.toLowerCase().includes('ticket')) {
             return name;
         }
-    }
-
-    if (transcriptContent) {
-        match = transcriptContent.match(/[Tt]icket\s+claimed\s+by[^\d]*?(\d{15,20})/);
-        if (match) return match[1];
-
-        match = transcriptContent.match(/[Cc]losed\s+by[^\d]*?(\d{15,20})/);
-        if (match) return match[1];
     }
 
     return null;
@@ -1005,7 +1095,16 @@ client.on('messageCreate', async (message) => {
 
             const ticketName = extractTicketName(fullText, transcriptUrl);
             const ticketOwnerId = extractTicketOwner(fullText);
-            const claimedBy = extractClaimedBy(fullText, transcriptContent);
+            const claimedBy = extractClaimedBy(fullText);
+
+            // Transcript-based data extraction
+            const openedAt = transcriptContent ? extractTicketOpenedAt(transcriptContent) : null;
+            const openedByUsername = transcriptContent ? extractOpenedByUsername(transcriptContent) : null;
+            const handlerUsername = transcriptContent ? extractHandlerFromTranscript(transcriptContent, openedByUsername) : null;
+            const responseTime = formatResponseTime(openedAt);
+
+            if (handlerUsername) console.log(`🔍 Handler from transcript: "${handlerUsername}"`);
+            if (openedAt) console.log(`⏰ Opened at (UTC): ${openedAt}, response time: ${responseTime}`);
 
             let panelName = 'Ticket';
             if (ticketName && ticketName.includes('-')) {
@@ -1025,6 +1124,7 @@ client.on('messageCreate', async (message) => {
 
             const ticketData = {
                 timestamp: new Date().toISOString(),
+                openedAt: openedAt || new Date().toISOString(),
                 ticketOwner: ticketOwnerId ? `<@${ticketOwnerId}>` : null,
                 ticketOwnerId: ticketOwnerId,
                 ticketName: ticketName,
@@ -1032,14 +1132,10 @@ client.on('messageCreate', async (message) => {
                 transcriptFile: finalTranscriptPath,
                 transcriptUrl: transcriptUrl || null,
                 claimedBy: claimedBy,
+                handlerUsername: handlerUsername,
                 users: users,
-                responseTime: 'N/A'
+                responseTime: responseTime
             };
-
-            const respMatch = fullText.match(/(?:Response Time|Response)[^\n\r`]*`?([^`\n\r]+)/i);
-            if (respMatch) {
-                ticketData.responseTime = respMatch[1].trim();
-            }
 
             if (ticketOwnerId) {
                 try {
