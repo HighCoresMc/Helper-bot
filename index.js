@@ -5,35 +5,35 @@ const https = require('https');
 const http = require('http');
 require('dotenv').config();
 
-// إعدادات البوت من متغيرات البيئة
+// Config
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const LOGGING_CHANNEL_ID = process.env.LOGGING_CHANNEL_ID;
 const TICKETS_FILE = path.join(__dirname, './tickets.js');
 const TRANSCRIPTS_FOLDER = path.join(__dirname, './transcripts');
 const TICKET_CATEGORY_ID = '1487143174567628840';
 
-// إعدادات MC Server Status
+// MC Status
 const MC_STATUS_CHANNEL_ID = process.env.MC_STATUS_CHANNEL_ID || '1487139736748425236';
 const MC_STATUS_MESSAGE_ID = process.env.MC_STATUS_MESSAGE_ID || '1508162784339165376';
 const MC_LOGS_CHANNEL_ID = process.env.MC_LOGS_CHANNEL_ID || '1487148944667578368';
 
-// إعدادات GitHub من متغيرات البيئة
+// GitHub
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const GITHUB_OWNER = process.env.GITHUB_OWNER;
 const GITHUB_REPO = process.env.GITHUB_REPO;
 const GITHUB_FILE_PATH = 'tickets.js';
 
-// Discord Stats Channel
+// Discord Stats
 const DC_STATS_CHANNEL_ID = '1495819247685996844';
 const DC_STATS_MESSAGE_ID = process.env.DC_STATS_MESSAGE_ID || 'your_dc_status_msg_id';
 
-// إنشاء مجلد الترانسكربتات إذا ما كان موجود
+// Transcripts Folder
 if (!fs.existsSync(TRANSCRIPTS_FOLDER)) {
     fs.mkdirSync(TRANSCRIPTS_FOLDER, { recursive: true });
-    console.log('📁 تم إنشاء مجلد transcripts');
+    console.log('📁 Created transcripts folder');
 }
 
-// إنشاء البوت
+// Client
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -44,15 +44,15 @@ const client = new Client({
     ]
 });
 
-// إعدادات Supabase
+// Supabase
 const SUPABASE_URL  = process.env.SUPABASE_URL;
 const SUPABASE_KEY  = process.env.SUPABASE_KEY;
 const GUILD_ID      = process.env.GUILD_ID;
 
-// Discord Role ID للستاف
+// Roles
 const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID || '1487195816220430406';
 
-// تحديث Supabase بعدد الأدمن الأونلاين (من الكاش فقط — بدون fetch)
+// Online Admins
 var _onlineUpdateTimer = null;
 
 function scheduleOnlineUpdate(delay = 5000) {
@@ -65,8 +65,6 @@ async function updateOnlineAdmins() {
         const guild = client.guilds.cache.get(GUILD_ID);
         if (!guild) return;
 
-        // استخدم الكاش فقط — بدون fetch لتجنب rate limit
-        // فلتر الستاف الأونلاين مع إزالة التكرار بالـ ID
         const seen = new Set();
         const onlineStaff = guild.members.cache.filter(member => {
             if (seen.has(member.id)) return false;
@@ -79,20 +77,16 @@ async function updateOnlineAdmins() {
         const count = onlineStaff.size;
         const names = onlineStaff.map(m => m.displayName).join(', ');
         
-        console.log('👥 أدمن أونلاين:', count, names ? '(' + names + ')' : '(لا أحد)');
+        console.log('👥 Online Staff:', count, names ? '(' + names + ')' : '(none)');
 
-        console.log('🔄 جاري الإرسال لـ Supabase... URL:', SUPABASE_URL ? 'موجود' : 'ناقص', 'KEY:', SUPABASE_KEY ? 'موجود' : 'ناقص');
-        if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('❌ SUPABASE_URL أو SUPABASE_KEY ناقص!'); return; }
+        console.log('🔄 Sending to Supabase... URL:', SUPABASE_URL ? 'OK' : 'MISSING', 'KEY:', SUPABASE_KEY ? 'OK' : 'MISSING');
+        if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('❌ SUPABASE_URL or SUPABASE_KEY missing!'); return; }
 
         const valueJson = JSON.stringify({ count, names, updated: new Date().toISOString() });
-        const payload = JSON.stringify({ key: 'admin_online', value: valueJson });
-        
+        const patchPayload = JSON.stringify({ value: valueJson });
         const https2 = require('https');
         const urlObj = new URL(SUPABASE_URL + '/rest/v1/settings');
 
-        // Use upsert (POST with Prefer: resolution=merge-duplicates)
-        // PATCH على الصف الموجود مباشرة
-        const patchPayload = JSON.stringify({ value: valueJson });
         const options = {
             hostname: urlObj.hostname,
             path: urlObj.pathname + '?key=eq.admin_online',
@@ -124,15 +118,14 @@ async function updateOnlineAdmins() {
         });
 
     } catch (err) {
-        console.error('❌ خطأ في تحديث الأدمن الأونلاين:', err.message);
+        console.error('❌ updateOnlineAdmins error:', err.message);
     }
 }
 
-// قراءة ملف التكتات
+// Tickets — Load
 function loadTickets() {
     if (fs.existsSync(TICKETS_FILE)) {
         const data = fs.readFileSync(TICKETS_FILE, 'utf8');
-        // استخراج البيانات من window.ticketsData
         const match = data.match(/window\.ticketsData\s*=\s*(\[[\s\S]*\]);/);
         if (match) {
             return JSON.parse(match[1]);
@@ -141,194 +134,94 @@ function loadTickets() {
     return [];
 }
 
-// حفظ التكتات
+// Tickets — Save
 function saveTickets(tickets) {
-    const jsContent = `// بيانات التكتات\nwindow.ticketsData = ${JSON.stringify(tickets, null, 2)};\n`;
+    const jsContent = `// Tickets Data\nwindow.ticketsData = ${JSON.stringify(tickets, null, 2)};\n`;
     fs.writeFileSync(TICKETS_FILE, jsContent, 'utf8');
-    console.log('✅ تم حفظ التكت في tickets.js');
-    
-    // رفع على GitHub
-    uploadToGitHub(jsContent);
+    console.log('✅ Saved tickets.js');
+    return jsContent;
 }
 
-// رفع الملف على GitHub
-async function uploadToGitHub(content) {
+// GitHub — API Request
+function githubApiRequest(method, path, body) {
+    return new Promise((resolve, reject) => {
+        const payload = body ? JSON.stringify(body) : null;
+        const options = {
+            hostname: 'api.github.com',
+            path,
+            method,
+            headers: {
+                'Authorization': `token ${GITHUB_TOKEN}`,
+                'User-Agent': 'Ticket-Bot',
+                'Accept': 'application/vnd.github.v3+json',
+                ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {})
+            }
+        };
+        const req = https.request(options, res => {
+            let data = '';
+            res.on('data', c => data += c);
+            res.on('end', () => {
+                try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
+                catch (e) { resolve({ status: res.statusCode, body: data }); }
+            });
+        });
+        req.on('error', reject);
+        if (payload) req.write(payload);
+        req.end();
+    });
+}
+
+// GitHub — Multi-File Commit
+async function uploadFilesToGitHub(files, commitMessage) {
     try {
-        console.log('📤 جاري رفع tickets.js على GitHub...');
-        
-        // جلب SHA الحالي للملف
-        const getCurrentSHA = () => {
-            return new Promise((resolve, reject) => {
-                const options = {
-                    hostname: 'api.github.com',
-                    path: `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`,
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'User-Agent': 'Ticket-Bot',
-                        'Accept': 'application/vnd.github.v3+json'
-                    }
-                };
-                
-                const req = https.request(options, (res) => {
-                    let data = '';
-                    res.on('data', (chunk) => data += chunk);
-                    res.on('end', () => {
-                        if (res.statusCode === 200) {
-                            const json = JSON.parse(data);
-                            resolve(json.sha);
-                        } else {
-                            resolve(null);
-                        }
-                    });
-                });
-                
-                req.on('error', reject);
-                req.end();
+        console.log(`📤 Uploading ${files.length} file(s) to GitHub in one commit...`);
+
+        const base = `/repos/${GITHUB_OWNER}/${GITHUB_REPO}`;
+
+        const refRes = await githubApiRequest('GET', `${base}/git/ref/heads/main`);
+        if (refRes.status !== 200) throw new Error('Failed to get ref: ' + JSON.stringify(refRes.body));
+        const latestCommitSha = refRes.body.object.sha;
+
+        const commitRes = await githubApiRequest('GET', `${base}/git/commits/${latestCommitSha}`);
+        if (commitRes.status !== 200) throw new Error('Failed to get commit: ' + JSON.stringify(commitRes.body));
+        const baseTreeSha = commitRes.body.tree.sha;
+
+        const treeItems = [];
+        for (const file of files) {
+            const blobRes = await githubApiRequest('POST', `${base}/git/blobs`, {
+                content: Buffer.from(file.content).toString('base64'),
+                encoding: 'base64'
             });
-        };
-        
-        const sha = await getCurrentSHA();
-        
-        // رفع الملف
-        const uploadFile = (sha) => {
-            return new Promise((resolve, reject) => {
-                const base64Content = Buffer.from(content).toString('base64');
-                const payload = JSON.stringify({
-                    message: 'Update tickets.js - New ticket added',
-                    content: base64Content,
-                    sha: sha
-                });
-                
-                const options = {
-                    hostname: 'api.github.com',
-                    path: `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${GITHUB_FILE_PATH}`,
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'User-Agent': 'Ticket-Bot',
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/vnd.github.v3+json'
-                    }
-                };
-                
-                const req = https.request(options, (res) => {
-                    let data = '';
-                    res.on('data', (chunk) => data += chunk);
-                    res.on('end', () => {
-                        if (res.statusCode === 200 || res.statusCode === 201) {
-                            resolve(true);
-                        } else {
-                            reject(new Error(`GitHub API Error: ${res.statusCode} - ${data}`));
-                        }
-                    });
-                });
-                
-                req.on('error', reject);
-                req.write(payload);
-                req.end();
-            });
-        };
-        
-        await uploadFile(sha);
-        console.log('✅ تم رفع tickets.js على GitHub بنجاح!');
-        console.log('🌐 الموقع سيتحدث تلقائياً خلال دقيقة!');
-        
+            if (blobRes.status !== 201) throw new Error(`Failed to create blob for ${file.path}: ` + JSON.stringify(blobRes.body));
+            treeItems.push({ path: file.path, mode: '100644', type: 'blob', sha: blobRes.body.sha });
+        }
+
+        const newTreeRes = await githubApiRequest('POST', `${base}/git/trees`, { base_tree: baseTreeSha, tree: treeItems });
+        if (newTreeRes.status !== 201) throw new Error('Failed to create tree: ' + JSON.stringify(newTreeRes.body));
+
+        const newCommitRes = await githubApiRequest('POST', `${base}/git/commits`, {
+            message: commitMessage,
+            tree: newTreeRes.body.sha,
+            parents: [latestCommitSha]
+        });
+        if (newCommitRes.status !== 201) throw new Error('Failed to create commit: ' + JSON.stringify(newCommitRes.body));
+
+        const updateRefRes = await githubApiRequest('PATCH', `${base}/git/refs/heads/main`, { sha: newCommitRes.body.sha });
+        if (updateRefRes.status !== 200) throw new Error('Failed to update ref: ' + JSON.stringify(updateRefRes.body));
+
+        console.log(`✅ Uploaded ${files.length} file(s) to GitHub successfully!`);
+        console.log('🌐 Site will auto-update within a minute!');
+        return true;
     } catch (error) {
-        console.error('❌ خطأ في رفع الملف على GitHub:', error.message);
+        console.error('❌ uploadFilesToGitHub error:', error.message);
+        return false;
     }
 }
 
-// رفع الترانسكربت على GitHub
-async function uploadTranscriptToGitHub(fileName, content) {
-    try {
-        console.log(`📤 جاري رفع الترانسكربت ${fileName} على GitHub...`);
-        
-        const transcriptPath = `transcripts/${fileName}`;
-        
-        // جلب SHA الحالي للملف (إذا كان موجود)
-        const getCurrentSHA = () => {
-            return new Promise((resolve, reject) => {
-                const options = {
-                    hostname: 'api.github.com',
-                    path: `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${transcriptPath}`,
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'User-Agent': 'Ticket-Bot',
-                        'Accept': 'application/vnd.github.v3+json'
-                    }
-                };
-                
-                const req = https.request(options, (res) => {
-                    let data = '';
-                    res.on('data', (chunk) => data += chunk);
-                    res.on('end', () => {
-                        if (res.statusCode === 200) {
-                            const json = JSON.parse(data);
-                            resolve(json.sha);
-                        } else {
-                            resolve(null);
-                        }
-                    });
-                });
-                
-                req.on('error', reject);
-                req.end();
-            });
-        };
-        
-        const sha = await getCurrentSHA();
-        
-        // رفع الملف
-        const uploadFile = (sha) => {
-            return new Promise((resolve, reject) => {
-                const base64Content = Buffer.from(content).toString('base64');
-                const payload = JSON.stringify({
-                    message: `Add transcript: ${fileName}`,
-                    content: base64Content,
-                    sha: sha
-                });
-                
-                const options = {
-                    hostname: 'api.github.com',
-                    path: `/repos/${GITHUB_OWNER}/${GITHUB_REPO}/contents/${transcriptPath}`,
-                    method: 'PUT',
-                    headers: {
-                        'Authorization': `token ${GITHUB_TOKEN}`,
-                        'User-Agent': 'Ticket-Bot',
-                        'Content-Type': 'application/json',
-                        'Accept': 'application/vnd.github.v3+json'
-                    }
-                };
-                
-                const req = https.request(options, (res) => {
-                    let data = '';
-                    res.on('data', (chunk) => data += chunk);
-                    res.on('end', () => {
-                        if (res.statusCode === 200 || res.statusCode === 201) {
-                            resolve(true);
-                        } else {
-                            reject(new Error(`GitHub API Error: ${res.statusCode} - ${data}`));
-                        }
-                    });
-                });
-                
-                req.on('error', reject);
-                req.write(payload);
-                req.end();
-            });
-        };
-        
-        await uploadFile(sha);
-        console.log(`✅ تم رفع الترانسكربت ${fileName} على GitHub بنجاح!`);
-        
-    } catch (error) {
-        console.error(`❌ خطأ في رفع الترانسكربت على GitHub: ${error.message}`);
-    }
-}
+// GitHub — Legacy Stub
+async function uploadTranscriptToGitHub() {}
 
-// تحميل ملف من رابط
+// Helpers — Download File
 function downloadFile(url, filepath) {
     return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
@@ -347,6 +240,7 @@ function downloadFile(url, filepath) {
     });
 }
 
+// Helpers — Fetch HTML
 function fetchHtmlFromUrl(url) {
     return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
@@ -366,6 +260,7 @@ function fetchHtmlFromUrl(url) {
     });
 }
 
+// Supabase — Save Ticket
 async function saveTicketToSupabase(ticketData) {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
         return;
@@ -542,7 +437,6 @@ async function saveTicketToSupabase(ticketData) {
             status: 'closed',
             pts: ptsToAward,
             response_time: ticketData.responseTime || 'N/A',
-            transcript_url: ticketData.transcriptUrl || null,
             created_at: ticketData.timestamp
         });
         const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets');
@@ -560,47 +454,51 @@ async function saveTicketToSupabase(ticketData) {
                 }
             };
             const req = https.request(options, res => {
-                res.on('data', () => {});
-                res.on('end', () => resolve());
+                let body = '';
+                res.on('data', c => body += c);
+                res.on('end', () => {
+                    if (res.statusCode >= 400) {
+                        console.error('❌ Supabase tickets INSERT failed:', res.statusCode, body);
+                    } else {
+                        console.log('✅ Ticket saved to Supabase');
+                    }
+                    resolve();
+                });
             });
-            req.on('error', () => resolve());
+            req.on('error', (e) => { console.error('❌ Supabase INSERT network error:', e.message); resolve(); });
             req.write(ticketPayload);
             req.end();
         });
-    } catch (err) {}
+    } catch (err) {
+        console.error('❌ saveTicketToSupabase error:', err.message);
+    }
 }
 
-// عند تشغيل البوت
+// Ready
 client.once('ready', () => {
-    console.log('🤖 البوت شغال!');
-    console.log(`📝 اسم البوت: ${client.user.tag}`);
-    console.log(`📊 يراقب الروم: ${LOGGING_CHANNEL_ID}`);
-    console.log(`📁 مجلد الترانسكربتات: ${TRANSCRIPTS_FOLDER}`);
-    console.log('⏳ في انتظار رسائل الترانسكربت...');
+    console.log('🤖 Bot is online!');
+    console.log(`📝 Bot name: ${client.user.tag}`);
+    console.log(`📊 Watching channel: ${LOGGING_CHANNEL_ID}`);
+    console.log(`📁 Transcripts folder: ${TRANSCRIPTS_FOLDER}`);
+    console.log('⏳ Waiting for transcript messages...');
     console.log('---');
-    // جلب الأعضاء مرة واحدة عند البداية لملء الكاش
     const guild = client.guilds.cache.get(GUILD_ID);
     if (guild) {
         guild.members.fetch().then(() => {
-            console.log('✅ تم تحميل الأعضاء في الكاش:', guild.members.cache.size);
+            console.log('✅ Members cached:', guild.members.cache.size);
             updateOnlineAdmins();
         }).catch(e => console.error('fetch members error:', e.message));
     }
-    // تحديث كل دقيقة من الكاش (بدون fetch)
     setInterval(updateOnlineAdmins, 60 * 1000);
     
-    // جلب MC Status كل دقيقة
     fetchMCStatus();
     setInterval(fetchMCStatus, 60 * 1000);
     
-    // جلب Discord Stats كل 16 ثانية
     fetchDiscordStats();
     setInterval(fetchDiscordStats, 16 * 1000);
 });
 
-// ==========================================
-// جلب MC Server Status من Channel Topic + Embed
-// ==========================================
+// MC Status
 async function fetchMCStatus() {
     try {
         const mcData = {
@@ -619,13 +517,12 @@ async function fetchMCStatus() {
             lastUpdated: new Date().toISOString()
         };
         
-        // === طريقة 1: قراءة من Channel Topic (mc-logs) ===
+        // Channel Topic
         const logsChannel = client.channels.cache.get(MC_LOGS_CHANNEL_ID);
         if (logsChannel && logsChannel.topic) {
             const topic = logsChannel.topic;
             console.log('📋 MC Logs Topic:', topic);
             
-            // Players Online: "0/100 players online"
             const playersMatch = topic.match(/(\d+)\/(\d+)\s*players?\s*online/i);
             if (playersMatch) {
                 mcData.playersOnline = playersMatch[1];
@@ -633,14 +530,12 @@ async function fetchMCStatus() {
                 mcData.serverStatus = parseInt(playersMatch[1]) >= 0 ? 'Online' : 'Offline';
             }
             
-            // Unique Players: "3 unique players ever joined"
             const uniqueMatch = topic.match(/(\d+)\s*unique\s*players?/i);
             if (uniqueMatch) {
                 mcData.uniquePlayers = uniqueMatch[1];
-                mcData.totalLogins = uniqueMatch[1]; // استخدمه كـ total logins
+                mcData.totalLogins = uniqueMatch[1];
             }
             
-            // Uptime: "Server online for 6470 minutes"
             const uptimeMatch = topic.match(/online\s*for\s*(\d+)\s*minutes?/i);
             if (uptimeMatch) {
                 const mins = parseInt(uptimeMatch[1]);
@@ -651,11 +546,10 @@ async function fetchMCStatus() {
             }
         }
         
-        // === طريقة 2: قراءة من Embed (server-status) للبيانات الإضافية ===
+        // Status Embed
         try {
             let statusChannel = client.channels.cache.get(MC_STATUS_CHANNEL_ID);
             
-            // إذا القناة مو في الكاش، جلبها
             if (!statusChannel) {
                 statusChannel = await client.channels.fetch(MC_STATUS_CHANNEL_ID);
             }
@@ -667,36 +561,28 @@ async function fetchMCStatus() {
                 if (message && message.embeds && message.embeds.length > 0) {
                     const embed = message.embeds[0];
                     
-                    // قراءة من description إذا موجود
                     if (embed.description) {
                         const desc = embed.description;
                         
-                        // Server Ping
                         const pingMatch = desc.match(/Server Ping[^\d]*(\d+)/i);
                         if (pingMatch) mcData.serverPing = pingMatch[1] + 'ms';
                         
-                        // Health
                         const healthMatch = desc.match(/Health[^\d]*([\d.]+)/i);
                         if (healthMatch) mcData.health = healthMatch[1] + '%';
                         
-                        // Peak Players
                         const peakMatch = desc.match(/Peak Players[^\d]*(\d+)/i);
                         if (peakMatch) mcData.peakPlayers = peakMatch[1];
                         
-                        // Total Logins
                         const loginsMatch = desc.match(/Total Logins[^\d]*(\d+)/i);
                         if (loginsMatch) mcData.totalLogins = loginsMatch[1];
                         
-                        // Availability
                         const availMatch = desc.match(/Availability[^\d]*([\d.]+)/i);
                         if (availMatch) mcData.availability = availMatch[1] + '%';
                         
-                        // Server IP
                         const ipMatch = desc.match(/Server IP[^\d]*([\d.:]+)/i);
                         if (ipMatch) mcData.serverIP = ipMatch[1];
                     }
                     
-                    // قراءة من fields إذا موجودة
                     if (embed.fields && embed.fields.length > 0) {
                         embed.fields.forEach(field => {
                             const name = field.name.toLowerCase();
@@ -735,36 +621,30 @@ async function fetchMCStatus() {
             console.log('⚠️ Could not fetch embed:', embedErr.message);
         }
         
-        // حفظ في Supabase
         await saveToSupabase('mc_status', mcData);
         console.log('✅ MC Status:', mcData.playersOnline + '/' + mcData.maxPlayers, '|', mcData.serverStatus, '| Ping:', mcData.serverPing, '| Uptime:', mcData.uptime);
         
     } catch (err) {
-        console.error('❌ خطأ في جلب MC Status:', err.message);
+        console.error('❌ fetchMCStatus error:', err.message);
     }
 }
 
-// ==========================================
-// جلب Discord Stats + Tickets Count
-// ==========================================
+// Discord Stats
 async function fetchDiscordStats() {
     try {
         const guild = client.guilds.cache.get(GUILD_ID);
         if (!guild) return;
         
-        // عدد الأعضاء الأونلاين
         const onlineMembers = guild.members.cache.filter(m => 
             m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)
         ).size;
         
-        // جلب عدد التكتات المفتوحة من الكيتاغوري (طرح 2 للمستثنى)
         const ticketCategory = guild.channels.cache.get(TICKET_CATEGORY_ID);
         let openTickets = 0;
         if (ticketCategory && ticketCategory.children) {
             openTickets = Math.max(0, ticketCategory.children.cache.size - 2);
         }
         
-        // جلب عدد التكتات الكلي من Supabase (اختياري للعرض)
         let closedTickets = 0;
         
         try {
@@ -823,22 +703,21 @@ async function fetchDiscordStats() {
         
         await saveToSupabase('dc_status', dcData);
         
-        // تحديث رسالة الدسكورد (English Embed)
         await updateDiscordStatsEmbed(guild, dcData);
         
         console.log('✅ DC Status updated:', onlineMembers + '/' + guild.memberCount, 'online |', openTickets, 'open tickets');
         
     } catch (err) {
-        console.error('❌ خطأ في جلب DC Stats:', err.message);
+        console.error('❌ fetchDiscordStats error:', err.message);
     }
 }
 
+// Discord Stats Embed
 async function updateDiscordStatsEmbed(guild, data) {
     try {
         const channel = client.channels.cache.get(DC_STATS_CHANNEL_ID) || await client.channels.fetch(DC_STATS_CHANNEL_ID);
         if (!channel) return;
 
-        // تصميم الـ Embed الشامل والفخم - كلام بشري بسيط
         const embed = {
             author: { name: 'OPEX DISCORD SERVER MONITOR', icon_url: guild.iconURL() },
             title: '`[ SERVER LIVE STATUS ]`',
@@ -853,7 +732,6 @@ async function updateDiscordStatsEmbed(guild, data) {
             footer: { text: 'Last Update • ' + new Date().toLocaleTimeString('en-GB') }
         };
 
-        // إرسال رسالة جديدة كل مرة (نظام اللوق المتتابع)
         await channel.send({ embeds: [embed] });
 
     } catch (e) {
@@ -861,12 +739,10 @@ async function updateDiscordStatsEmbed(guild, data) {
     }
 }
 
-// ==========================================
-// حفظ في Supabase (عام)
-// ==========================================
+// Supabase — Save Settings
 async function saveToSupabase(key, data) {
     if (!SUPABASE_URL || !SUPABASE_KEY) {
-        console.error('❌ SUPABASE credentials ناقصة!');
+        console.error('❌ SUPABASE credentials missing!');
         return;
     }
     
@@ -892,7 +768,6 @@ async function saveToSupabase(key, data) {
             res.on('data', c => body += c);
             res.on('end', () => {
                 if (res.statusCode >= 400) {
-                    // Try INSERT if PATCH fails (row doesn't exist)
                     insertToSupabase(key, data).then(resolve).catch(reject);
                 } else {
                     resolve();
@@ -905,7 +780,7 @@ async function saveToSupabase(key, data) {
     });
 }
 
-// Insert new row to Supabase
+// Supabase — Insert Settings
 async function insertToSupabase(key, data) {
     const valueJson = JSON.stringify(data);
     const payload = JSON.stringify({ key: key, value: valueJson });
@@ -936,13 +811,12 @@ async function insertToSupabase(key, data) {
     });
 }
 
-// عند تغيير حالة عضو — debounce دقيقتين لتجنب الإزعاج
+// Presence Update
 client.on('presenceUpdate', () => {
     scheduleOnlineUpdate(120000);
 });
 
-// عند استقبال رسالة
-// Helpers
+// Helpers — Extract Ticket Name
 function extractTicketName(fullText, transcriptUrl) {
     let match = fullText.match(/Case\s*#(\d+)/i) || fullText.match(/case-(\d+)/i);
     if (match) return `case-${match[1]}`;
@@ -961,6 +835,7 @@ function extractTicketName(fullText, transcriptUrl) {
     return 'ticket';
 }
 
+// Helpers — Extract Ticket Owner
 function extractTicketOwner(fullText) {
     let match = fullText.match(/(?:Ticket Owner|Owner|User|Created by)[^\d<]*<@!?(\d+)>/i);
     if (match) return match[1];
@@ -971,16 +846,14 @@ function extractTicketOwner(fullText) {
     return null;
 }
 
+// Helpers — Extract Claimed By
 function extractClaimedBy(fullText, transcriptContent) {
-    // Closed/Claimed/Handled by with Discord mention
     let match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[^\d<:]*[:\s]*<@!?(\d+)>/i);
     if (match) return match[1];
 
-    // Closed/Claimed/Handled by with raw Discord ID
     match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y\s*[:\s]*(\d{15,22})/i);
     if (match) return match[1];
 
-    // Closed/Claimed/Handled by with display name (non-ID, non-mention)
     match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y\s*[:\s]+([^\n\r<@\d(][^\n\r(]{2,})/i);
     if (match) {
         const name = match[1].trim().split('\n')[0].trim();
@@ -989,7 +862,6 @@ function extractClaimedBy(fullText, transcriptContent) {
         }
     }
 
-    // Search inside transcript HTML
     if (transcriptContent) {
         match = transcriptContent.match(/[Tt]icket\s+claimed\s+by[^\d]*?(\d{15,20})/);
         if (match) return match[1];
@@ -998,11 +870,10 @@ function extractClaimedBy(fullText, transcriptContent) {
         if (match) return match[1];
     }
 
-    // No handler found — do not fall back to ticket owner
     return null;
 }
 
-// Handler
+// Message Handler
 client.on('messageCreate', async (message) => {
     // Broadcast Command
     if (message.content.startsWith('!bc')) {
@@ -1025,7 +896,7 @@ client.on('messageCreate', async (message) => {
 
         if (targetGuild && (bcContent || attachments.length > 0)) {
             try {
-                await message.channel.send(`⏳ جاري الإرسال لسيرفر: ${targetGuild.name}...`);
+                await message.channel.send(`⏳ Broadcasting to: ${targetGuild.name}...`);
                 const members = await targetGuild.members.fetch();
                 for (const [memberId, member] of members) {
                     if (!member.user.bot) {
@@ -1040,27 +911,27 @@ client.on('messageCreate', async (message) => {
                         }
                         try {
                             await member.send(sendOptions);
-                            console.log(`✅ أرسلت لـ: ${member.user.username}`);
+                            console.log(`✅ Sent to: ${member.user.username}`);
                         } catch (err) {
-                            console.error(`❌ فشل الإرسال لـ: ${member.user.username}`);
+                            console.error(`❌ Failed to send to: ${member.user.username}`);
                         }
                         await new Promise(resolve => setTimeout(resolve, 1000));
                     }
                 }
-                await message.channel.send(`تم الانتهاء من البرودكاست لسيرفر ${targetGuild.name} ✅`);
+                await message.channel.send(`Broadcast to ${targetGuild.name} done ✅`);
             } catch (err) {
                 console.error(err);
-                await message.channel.send(`❌ حدث خطأ أثناء إرسال البرودكاست: ${err.message}`);
+                await message.channel.send(`❌ Broadcast error: ${err.message}`);
             }
         } else {
-            await message.channel.send("❌ خطأ: لم أجد السيرفر أو الرسالة فارغة.");
+            await message.channel.send("❌ Error: server not found or message is empty.");
         }
         return;
     }
 
     if (message.channel.id === LOGGING_CHANNEL_ID && message.author.bot) {
-        console.log('📬 رسالة جديدة من بوت في روم الـ Logging!');
-        console.log('📝 اسم البوت:', message.author.username);
+        console.log('📬 New bot message in Logging channel!');
+        console.log('📝 Bot name:', message.author.username);
 
         let fullText = message.content || '';
         let transcriptUrl = null;
@@ -1111,22 +982,22 @@ client.on('messageCreate', async (message) => {
         }
 
         if (transcriptUrl || attachmentUrl) {
-            console.log(`📎 تم العثور على رابط/ملف ترانسكربت: ${transcriptUrl || attachmentUrl}`);
+            console.log(`📎 Transcript found: ${transcriptUrl || attachmentUrl}`);
 
             let transcriptContent = '';
+            let transcriptFileName = null;
             try {
                 if (attachmentUrl && cleanFileName) {
                     const filePath = path.join(TRANSCRIPTS_FOLDER, cleanFileName);
                     await downloadFile(attachmentUrl, filePath);
                     transcriptContent = fs.readFileSync(filePath, 'utf8');
-                    await uploadTranscriptToGitHub(cleanFileName, transcriptContent);
+                    transcriptFileName = cleanFileName;
                 } else if (transcriptUrl && (transcriptUrl.includes('https://') || transcriptUrl.includes('http://'))) {
                     transcriptContent = await fetchHtmlFromUrl(transcriptUrl);
                     const parsedName = extractTicketName(fullText, transcriptUrl);
-                    const fileName = `${parsedName}.html`.replace(/[^a-zA-Z0-9.-]/g, '_');
-                    const filePath = path.join(TRANSCRIPTS_FOLDER, fileName);
+                    transcriptFileName = `${parsedName}.html`.replace(/[^a-zA-Z0-9.-]/g, '_');
+                    const filePath = path.join(TRANSCRIPTS_FOLDER, transcriptFileName);
                     fs.writeFileSync(filePath, transcriptContent, 'utf8');
-                    await uploadTranscriptToGitHub(fileName, transcriptContent);
                 }
             } catch (err) {
                 console.error('Error fetching/processing transcript:', err.message);
@@ -1146,8 +1017,8 @@ client.on('messageCreate', async (message) => {
             const users = userMatches ? [...new Set(userMatches)] : [];
 
             let finalTranscriptPath = null;
-            if (cleanFileName) {
-                finalTranscriptPath = `transcripts/${cleanFileName}`;
+            if (transcriptFileName) {
+                finalTranscriptPath = `transcripts/${transcriptFileName}`;
             } else {
                 finalTranscriptPath = `transcripts/${ticketName.replace(/[^a-zA-Z0-9.-]/g, '_')}.html`;
             }
@@ -1180,23 +1051,30 @@ client.on('messageCreate', async (message) => {
                 } catch(E) {}
             }
 
-            const tickets = loadTickets();
-            tickets.unshift(ticketData);
-            saveTickets(tickets);
+            const allTickets = loadTickets();
+            allTickets.unshift(ticketData);
+            const jsContent = saveTickets(allTickets);
+
+            // GitHub — Single Commit Upload
+            const filesToUpload = [{ path: GITHUB_FILE_PATH, content: jsContent }];
+            if (transcriptFileName && transcriptContent) {
+                filesToUpload.push({ path: `transcripts/${transcriptFileName}`, content: transcriptContent });
+            }
+            await uploadFilesToGitHub(filesToUpload, `Ticket closed: ${ticketName}`);
 
             await saveTicketToSupabase(ticketData);
 
-            console.log(`✅ تم حفظ التكت بنجاح: ${ticketName}`);
+            console.log(`✅ Ticket saved: ${ticketName}`);
             console.log('---\n');
         } else {
-            console.log('⚠️ لم يتم العثور على رابط أو ملف ترانسكربت في الرسالة.');
+            console.log('⚠️ No transcript link or file found in message.');
         }
     }
 });
 
-// تسجيل الدخول
-console.log('🔄 جاري تسجيل الدخول...');
+// Login
+console.log('🔄 Logging in...');
 client.login(DISCORD_TOKEN).catch(err => {
-    console.error('❌ خطأ في تسجيل الدخول:', err.message);
+    console.error('❌ Login error:', err.message);
     process.exit(1);
 });
