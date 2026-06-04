@@ -407,7 +407,7 @@ async function analyzeTicketWithAI(transcriptHtml, handlerName) {
     try {
         const transcriptText = extractTextFromTranscript(transcriptHtml);
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-        
+
         const prompt = `
 You are an expert AI evaluating a Discord admin's performance in a support ticket.
 The admin's name is "${handlerName}".
@@ -469,10 +469,10 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
             console.log("❌ All Gemini models failed.");
             return { totalPoints: 5, breakdown: { error: "All models failed" }, reasoning: "AI Error: All models failed" };
         }
-        
+
         // Clean up response if it contains markdown (like ```json ... ```)
         let response = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-        
+
         const json = JSON.parse(response);
 
         // Sum points safely just in case AI didn't
@@ -680,10 +680,10 @@ async function saveTicketToSupabase(ticketData) {
 
             try {
                 const logPayload = JSON.stringify({
-                    action_type: 'Ticket Closed (AI Analyzed)',
-                    details: `Handled ticket ${ticketData.ticketName} (+${ptsToAward} PTS). Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. AI Note: ${aiReasoning}`,
+                    action_type: 'Closed Ticket',
+                    details: `[AI Evaluation] Awarded ${ptsToAward} PTS to ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
                     category: 'Tickets',
-                    user_name: empName,
+                    user_name: 'System',
                     created_at: new Date().toISOString()
                 });
                 const logUrl = new URL(SUPABASE_URL + '/rest/v1/activity_log');
@@ -700,12 +700,17 @@ async function saveTicketToSupabase(ticketData) {
                             'Content-Length': Buffer.byteLength(logPayload)
                         }
                     };
-                    const req = https.request(options, () => resolve());
+                    const req = https.request(options, res => {
+                        res.on('data', () => { });
+                        res.on('end', () => resolve());
+                    });
                     req.on('error', () => resolve());
                     req.write(logPayload);
                     req.end();
                 });
-            } catch (e) { }
+            } catch (e) { 
+                console.error("❌ Error logging activity:", e.message);
+            }
         }
 
         const closedAt = new Date().toISOString();
