@@ -279,28 +279,21 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
     const seenIds = new Set();
     const handlers = [];
     
-    const openerId = extractTicketOpenerId(transcriptContent);
-
     // Try extracting by data-user-id first (more accurate)
     const idRegex = /data-user-id=['"](\d{17,19})['"][^>]*>([^<]+)</g;
     let m;
-    let foundIds = false;
     while ((m = idRegex.exec(transcriptContent)) !== null) {
         const id = m[1];
         const name = m[2].trim();
-        foundIds = true;
         
         if (seenIds.has(id)) continue;
         seenIds.add(id);
         
-        if (id === openerId) continue;
         if (botNames.some(b => name.toLowerCase().includes(b))) continue;
-        if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
+        // Don't skip openerId! If an admin opens it, we want them!
         
         handlers.push(id); // Prefer returning ID directly
     }
-
-    if (handlers.length > 0) return handlers[0];
 
     // Fallback to name if data-user-id not found
     const seenNames = new Set();
@@ -311,10 +304,11 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
         if (seenNames.has(name)) continue;
         seenNames.add(name);
         if (botNames.some(b => name.toLowerCase().includes(b))) continue;
-        if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
         nameHandlers.push(name);
     }
-    return nameHandlers[0] || null;
+    
+    // Return array of all possible handlers (IDs first, then names)
+    return [...handlers, ...nameHandlers];
 }
 
 // Helpers — Extract Opened At From Transcript
@@ -396,45 +390,74 @@ async function saveTicketToSupabase(ticketData) {
         let empDcPoints = 0;
         let empTickets = 0;
         let empName = 'Unassigned';
-        let resolvedClaimedBy = ticketData.handlerUsername || ticketData.claimedBy || null;
-
-        // Resolution chain: display name → discord_id → employee lookup
-        if (resolvedClaimedBy) {
-            const isDiscordId = /^\d{15,22}$/.test(resolvedClaimedBy);
-            if (!isDiscordId) {
-                const resolvedId = await resolveDisplayNameToDiscordId(resolvedClaimedBy);
-                if (resolvedId) {
-                    console.log(`🔍 Resolved "${resolvedClaimedBy}" → discord_id: ${resolvedId}`);
-                    resolvedClaimedBy = resolvedId;
-                }
+        let resolvedClaimedBy = null;
+        let emp = null;
+        
+        // Collect all possible handlers
+        let possibleHandlers = [];
+        if (ticketData.handlerUsername) {
+            if (Array.isArray(ticketData.handlerUsername)) {
+                possibleHandlers.push(...ticketData.handlerUsername);
+            } else {
+                possibleHandlers.push(ticketData.handlerUsername);
             }
         }
+        if (ticketData.claimedBy) {
+            possibleHandlers.push(ticketData.claimedBy);
+        }
 
-        // Also try handler from transcript if still not resolved
-        if (!resolvedClaimedBy && ticketData.handlerUsername) {
-            const isDiscordId = /^\d{15,22}$/.test(ticketData.handlerUsername);
-            if (isDiscordId) {
-                resolvedClaimedBy = ticketData.handlerUsername;
-                console.log(`🔍 Handler from transcript is already discord_id: ${resolvedClaimedBy}`);
-            } else {
-                const resolvedId = await resolveDisplayNameToDiscordId(ticketData.handlerUsername);
+        console.log(`🔍 Checking possible handlers:`, possibleHandlers);
+
+        for (const candidate of possibleHandlers) {
+            if (!candidate) continue;
+            let currentId = candidate;
+            
+            const isDiscordId = /^\d{15,22}$/.test(candidate);
+            if (!isDiscordId) {
+                const resolvedId = await resolveDisplayNameToDiscordId(candidate);
                 if (resolvedId) {
-                    console.log(`🔍 Resolved handler "${ticketData.handlerUsername}" → discord_id: ${resolvedId}`);
-                    resolvedClaimedBy = resolvedId;
+                    console.log(`🔍 Resolved candidate "${candidate}" → discord_id: ${resolvedId}`);
+                    currentId = resolvedId;
+                } else {
+                    continue;
+                }
+            }
+            
+            // Try looking up employee in DB
+            let empRes = await lookupEmployee(currentId);
+            if (Array.isArray(empRes) && empRes.length > 0) {
+                emp = empRes[0];
+                resolvedClaimedBy = currentId;
+                console.log(`✅ Found employee: ${emp.name} (id: ${emp.id})`);
+                break;
+            } else if (empRes && empRes.id) {
+                emp = empRes;
+                resolvedClaimedBy = currentId;
+                console.log(`✅ Found employee: ${emp.name} (id: ${emp.id})`);
+                break;
+            }
+            
+            // If not in DB, check if they are actually a staff member (for auto-create)
+            const guild = client.guilds.cache.get(GUILD_ID);
+            if (guild && typeof STAFF_ROLE_ID !== 'undefined') {
+                const member = guild.members.cache.get(currentId);
+                if (member && member.roles.cache.has(STAFF_ROLE_ID)) {
+                    resolvedClaimedBy = currentId;
+                    console.log(`⚠️ Handler is not in DB but is a staff member, queuing for auto-create: ${currentId}`);
+                    break;
                 }
             }
         }
 
         const ptsToAward = resolvedClaimedBy ? 5 : 0;
 
-        if (resolvedClaimedBy) {
-            let empRes = await lookupEmployee(resolvedClaimedBy);
-
-            let emp = null;
-            if (Array.isArray(empRes) && empRes.length > 0) {
-                emp = empRes[0];
-                console.log(`✅ Found employee: ${emp.name} (id: ${emp.id})`);
-            } else {
+        if (resolvedClaimedBy && emp) {
+            empId = emp.id;
+            empPoints = (emp.points || 0) + ptsToAward;
+            empDcPoints = (emp.discord_points || 0) + ptsToAward;
+            empTickets = (emp.tickets_handled || 0) + 1;
+            empName = emp.name;
+        } else if (resolvedClaimedBy) {
                 // Auto-create if it's a discord ID with staff role
                 const isDiscordId = /^\d{15,22}$/.test(resolvedClaimedBy);
                 if (isDiscordId) {
@@ -991,10 +1014,10 @@ function extractTicketOwner(fullText) {
 
 // Helpers — Extract Claimed By
 function extractClaimedBy(fullText) {
-    let match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[^\d<:]*[:\s]*<@!?(\d+)>/i);
+    let match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[\s:*]*<@!?(\d+)>/i);
     if (match) return match[1];
 
-    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y\s*[:\s]*(\d{15,22})/i);
+    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[\s:*]*(\d{15,22})/i);
     if (match) return match[1];
 
     match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y\s*[:\s]+([^\n\r<@\d(][^\n\r(]{2,})/i);
