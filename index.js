@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 const http = require('http');
-const cheerio = require('cheerio');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
@@ -47,9 +46,9 @@ const client = new Client({
 });
 
 // Supabase
-const SUPABASE_URL  = process.env.SUPABASE_URL;
-const SUPABASE_KEY  = process.env.SUPABASE_KEY;
-const GUILD_ID      = process.env.GUILD_ID;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_KEY;
+const GUILD_ID = process.env.GUILD_ID;
 
 // Roles
 const STAFF_ROLE_ID = process.env.STAFF_ROLE_ID || '1487195816220430406';
@@ -70,15 +69,15 @@ async function updateOnlineAdmins() {
         const seen = new Set();
         const onlineStaff = guild.members.cache.filter(member => {
             if (seen.has(member.id)) return false;
-            const isStaff  = member.roles.cache.has(STAFF_ROLE_ID);
-            const isOnline = member.presence && ['online','dnd','idle'].includes(member.presence.status);
+            const isStaff = member.roles.cache.has(STAFF_ROLE_ID);
+            const isOnline = member.presence && ['online', 'dnd', 'idle'].includes(member.presence.status);
             if (isStaff && isOnline) { seen.add(member.id); return true; }
             return false;
         });
 
         const count = onlineStaff.size;
         const names = onlineStaff.map(m => m.displayName).join(', ');
-        
+
         console.log('👥 Online Staff:', count, names ? '(' + names + ')' : '(none)');
 
         console.log('🔄 Sending to Supabase... URL:', SUPABASE_URL ? 'OK' : 'MISSING', 'KEY:', SUPABASE_KEY ? 'OK' : 'MISSING');
@@ -221,13 +220,13 @@ async function uploadFilesToGitHub(files, commitMessage) {
 }
 
 // GitHub — Legacy Stub
-async function uploadTranscriptToGitHub() {}
+async function uploadTranscriptToGitHub() { }
 
 // Helpers — Download File
 function downloadFile(url, filepath) {
     return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
-        
+
         const file = fs.createWriteStream(filepath);
         protocol.get(url, (response) => {
             response.pipe(file);
@@ -236,7 +235,7 @@ function downloadFile(url, filepath) {
                 resolve(filepath);
             });
         }).on('error', (err) => {
-            fs.unlink(filepath, () => {});
+            fs.unlink(filepath, () => { });
             reject(err);
         });
     });
@@ -267,11 +266,11 @@ function extractTicketOpenerId(transcriptContent) {
     const mentionRegex = /<@!?(\d{17,19})>/;
     const match = transcriptContent.match(mentionRegex);
     if (match) return match[1];
-    
+
     // Fallback: look for mention class
     const spanMatch = transcriptContent.match(/title="[^"]*\(ID:\s*(\d{17,19})\)"/);
     if (spanMatch) return spanMatch[1];
-    
+
     return null;
 }
 
@@ -280,20 +279,20 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
     const botNames = ['highcore mc', 'highcoremc', 'high core mc'];
     const seenIds = new Set();
     const handlers = [];
-    
+
     // Try extracting by data-user-id first (more accurate)
     const idRegex = /data-user-id=['"](\d{17,19})['"][^>]*>([^<]+)</g;
     let m;
     while ((m = idRegex.exec(transcriptContent)) !== null) {
         const id = m[1];
         const name = m[2].trim();
-        
+
         if (seenIds.has(id)) continue;
         seenIds.add(id);
-        
+
         if (botNames.some(b => name.toLowerCase().includes(b))) continue;
         // Don't skip openerId! If an admin opens it, we want them!
-        
+
         handlers.push(id); // Prefer returning ID directly
     }
 
@@ -308,7 +307,7 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
         if (botNames.some(b => name.toLowerCase().includes(b))) continue;
         nameHandlers.push(name);
     }
-    
+
     // Return array of all possible handlers (IDs first, then names)
     return [...handlers, ...nameHandlers];
 }
@@ -376,27 +375,26 @@ async function lookupEmployee(identifier) {
         const req = https.request(options, res => {
             let body = '';
             res.on('data', c => body += c);
-            res.on('end', () => { try { resolve(JSON.parse(body)); } catch(e) { resolve([]); } });
+            res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { resolve([]); } });
         });
         req.on('error', () => resolve([]));
         req.end();
     });
 }
 
-// Extracts raw text from HTML transcript for the AI
 function extractTextFromTranscript(html) {
-    const $ = cheerio.load(html);
-    let messages = [];
-    $('.chatlog__message-group').each((i, group) => {
-        const author = $(group).find('.chatlog__author').text().trim();
-        $(group).find('.chatlog__message').each((j, msg) => {
-            const content = $(msg).find('.chatlog__markdown').text().trim();
-            if (author && content) {
-                messages.push(`${author}: ${content}`);
-            }
-        });
-    });
-    return messages.join('\n');
+    // Remove scripts and styles
+    let clean = html.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+    clean = clean.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+    // Strip HTML tags
+    clean = clean.replace(/<[^>]+>/g, '\n');
+    // Decode basic entities
+    clean = clean.replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+    // Remove excessive newlines
+    clean = clean.replace(/\n\s*\n/g, '\n').trim();
+    // Truncate to avoid too large payloads (optional)
+    if (clean.length > 30000) clean = clean.substring(0, 30000);
+    return clean;
 }
 
 // AI Analysis function
@@ -450,15 +448,15 @@ Return ONLY a JSON object with this exact structure:
 Transcript:
 ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 `;
-        
+
         const result = await model.generateContent(prompt);
         const response = result.response.text();
         const json = JSON.parse(response);
-        
+
         // Sum points safely just in case AI didn't
         const total = (json.ticket_type_points || 0) + (json.responses_points || 0) + (json.level_speed_points || 0);
         json.total_points = total;
-        
+
         return {
             totalPoints: total || 5, // Fallback to 5 if 0 or error
             breakdown: json,
@@ -481,7 +479,7 @@ async function saveTicketToSupabase(ticketData) {
         let empName = 'Unassigned';
         let resolvedClaimedBy = null;
         let emp = null;
-        
+
         // Collect all possible handlers
         let possibleHandlers = [];
         if (ticketData.handlerUsername) {
@@ -500,7 +498,7 @@ async function saveTicketToSupabase(ticketData) {
         for (const candidate of possibleHandlers) {
             if (!candidate) continue;
             let currentId = candidate;
-            
+
             const isDiscordId = /^\d{15,22}$/.test(candidate);
             if (!isDiscordId) {
                 const resolvedId = await resolveDisplayNameToDiscordId(candidate);
@@ -511,7 +509,7 @@ async function saveTicketToSupabase(ticketData) {
                     continue;
                 }
             }
-            
+
             // Try looking up employee in DB
             let empRes = await lookupEmployee(currentId);
             if (Array.isArray(empRes) && empRes.length > 0) {
@@ -525,7 +523,7 @@ async function saveTicketToSupabase(ticketData) {
                 console.log(`✅ Found employee: ${emp.name} (id: ${emp.id})`);
                 break;
             }
-            
+
             // If not in DB, check if they are actually a staff member (for auto-create)
             const guild = client.guilds.cache.get(GUILD_ID);
             if (guild && typeof STAFF_ROLE_ID !== 'undefined') {
@@ -581,7 +579,7 @@ async function saveTicketToSupabase(ticketData) {
                                     }
                                 };
                                 const req = https.request(options, res => {
-                                    res.on('data', () => {});
+                                    res.on('data', () => { });
                                     res.on('end', () => resolveInsert());
                                 });
                                 req.on('error', () => resolveInsert());
@@ -634,7 +632,7 @@ async function saveTicketToSupabase(ticketData) {
             // if newEmp was created, tickets is 0 + 1 = 1. if existing, tickets_handled or tickets
             let currentTickets = empTickets !== undefined ? empTickets : 0;
             const newTickets = currentTickets + 1;
-            
+
             const patchPayload = JSON.stringify({ points: newPoints, dc_points: newDcPoints, tickets: newTickets });
             const empPatchUrl = new URL(SUPABASE_URL + '/rest/v1/employees?id=eq.' + empId);
             await new Promise((resolve) => {
@@ -650,7 +648,7 @@ async function saveTicketToSupabase(ticketData) {
                     }
                 };
                 const req = https.request(options, res => {
-                    res.on('data', () => {});
+                    res.on('data', () => { });
                     res.on('end', () => resolve());
                 });
                 req.on('error', () => resolve());
@@ -685,7 +683,7 @@ async function saveTicketToSupabase(ticketData) {
                     req.write(logPayload);
                     req.end();
                 });
-            } catch (e) {}
+            } catch (e) { }
         }
 
         const closedAt = new Date().toISOString();
@@ -759,10 +757,10 @@ client.once('ready', () => {
         }).catch(e => console.error('fetch members error:', e.message));
     }
     setInterval(updateOnlineAdmins, 60 * 1000);
-    
+
     fetchMCStatus();
     setInterval(fetchMCStatus, 60 * 1000);
-    
+
     fetchDiscordStats();
     setInterval(fetchDiscordStats, 16 * 1000);
 });
@@ -785,26 +783,26 @@ async function fetchMCStatus() {
             uniquePlayers: '0',
             lastUpdated: new Date().toISOString()
         };
-        
+
         // Channel Topic
         const logsChannel = client.channels.cache.get(MC_LOGS_CHANNEL_ID);
         if (logsChannel && logsChannel.topic) {
             const topic = logsChannel.topic;
             console.log('📋 MC Logs Topic:', topic);
-            
+
             const playersMatch = topic.match(/(\d+)\/(\d+)\s*players?\s*online/i);
             if (playersMatch) {
                 mcData.playersOnline = playersMatch[1];
                 mcData.maxPlayers = playersMatch[2];
                 mcData.serverStatus = parseInt(playersMatch[1]) >= 0 ? 'Online' : 'Offline';
             }
-            
+
             const uniqueMatch = topic.match(/(\d+)\s*unique\s*players?/i);
             if (uniqueMatch) {
                 mcData.uniquePlayers = uniqueMatch[1];
                 mcData.totalLogins = uniqueMatch[1];
             }
-            
+
             const uptimeMatch = topic.match(/online\s*for\s*(\d+)\s*minutes?/i);
             if (uptimeMatch) {
                 const mins = parseInt(uptimeMatch[1]);
@@ -814,49 +812,49 @@ async function fetchMCStatus() {
                 mcData.serverStatus = 'Online';
             }
         }
-        
+
         // Status Embed
         try {
             let statusChannel = client.channels.cache.get(MC_STATUS_CHANNEL_ID);
-            
+
             if (!statusChannel) {
                 statusChannel = await client.channels.fetch(MC_STATUS_CHANNEL_ID);
             }
-            
+
             if (statusChannel) {
                 const message = await statusChannel.messages.fetch(MC_STATUS_MESSAGE_ID);
                 console.log('📨 Embed found, fields:', message.embeds[0]?.fields?.length || 0);
-                
+
                 if (message && message.embeds && message.embeds.length > 0) {
                     const embed = message.embeds[0];
-                    
+
                     if (embed.description) {
                         const desc = embed.description;
-                        
+
                         const pingMatch = desc.match(/Server Ping[^\d]*(\d+)/i);
                         if (pingMatch) mcData.serverPing = pingMatch[1] + 'ms';
-                        
+
                         const healthMatch = desc.match(/Health[^\d]*([\d.]+)/i);
                         if (healthMatch) mcData.health = healthMatch[1] + '%';
-                        
+
                         const peakMatch = desc.match(/Peak Players[^\d]*(\d+)/i);
                         if (peakMatch) mcData.peakPlayers = peakMatch[1];
-                        
+
                         const loginsMatch = desc.match(/Total Logins[^\d]*(\d+)/i);
                         if (loginsMatch) mcData.totalLogins = loginsMatch[1];
-                        
+
                         const availMatch = desc.match(/Availability[^\d]*([\d.]+)/i);
                         if (availMatch) mcData.availability = availMatch[1] + '%';
-                        
+
                         const ipMatch = desc.match(/Server IP[^\d]*([\d.:]+)/i);
                         if (ipMatch) mcData.serverIP = ipMatch[1];
                     }
-                    
+
                     if (embed.fields && embed.fields.length > 0) {
                         embed.fields.forEach(field => {
                             const name = field.name.toLowerCase();
                             const value = field.value.replace(/`/g, '').trim();
-                            
+
                             if (name.includes('ping')) {
                                 const pingVal = value.match(/\d+/);
                                 if (pingVal) mcData.serverPing = pingVal[0] + 'ms';
@@ -889,10 +887,10 @@ async function fetchMCStatus() {
         } catch (embedErr) {
             console.log('⚠️ Could not fetch embed:', embedErr.message);
         }
-        
+
         await saveToSupabase('mc_status', mcData);
         console.log('✅ MC Status:', mcData.playersOnline + '/' + mcData.maxPlayers, '|', mcData.serverStatus, '| Ping:', mcData.serverPing, '| Uptime:', mcData.uptime);
-        
+
     } catch (err) {
         console.error('❌ fetchMCStatus error:', err.message);
     }
@@ -903,19 +901,19 @@ async function fetchDiscordStats() {
     try {
         const guild = client.guilds.cache.get(GUILD_ID);
         if (!guild) return;
-        
-        const onlineMembers = guild.members.cache.filter(m => 
+
+        const onlineMembers = guild.members.cache.filter(m =>
             m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)
         ).size;
-        
+
         const ticketCategory = guild.channels.cache.get(TICKET_CATEGORY_ID);
         let openTickets = 0;
         if (ticketCategory && ticketCategory.children) {
             openTickets = Math.max(0, ticketCategory.children.cache.size - 2);
         }
-        
+
         let closedTickets = 0;
-        
+
         try {
             const ticketsUrl = new URL(SUPABASE_URL + '/rest/v1/tickets?select=status');
             const ticketsResponse = await new Promise((resolve, reject) => {
@@ -928,14 +926,14 @@ async function fetchDiscordStats() {
                         'Authorization': 'Bearer ' + SUPABASE_KEY
                     }
                 };
-                
+
                 const req = https.request(options, res => {
                     let body = '';
                     res.on('data', c => body += c);
                     res.on('end', () => {
                         try {
                             resolve(JSON.parse(body));
-                        } catch(e) {
+                        } catch (e) {
                             resolve([]);
                         }
                     });
@@ -943,7 +941,7 @@ async function fetchDiscordStats() {
                 req.on('error', () => resolve([]));
                 req.end();
             });
-            
+
             if (Array.isArray(ticketsResponse)) {
                 ticketsResponse.forEach(t => {
                     if (t.status === 'open' || t.status === 'Open' || t.status === 'pending') {
@@ -953,10 +951,10 @@ async function fetchDiscordStats() {
                     }
                 });
             }
-        } catch(e) {
+        } catch (e) {
             console.log('Could not fetch tickets count:', e.message);
         }
-        
+
         const dcData = {
             totalMembers: guild.memberCount,
             onlineMembers: onlineMembers,
@@ -969,13 +967,13 @@ async function fetchDiscordStats() {
             onlineStaff: guild.members.cache.filter(m => m.roles.cache.has(STAFF_ROLE_ID) && m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)).size,
             lastUpdated: new Date().toISOString()
         };
-        
+
         await saveToSupabase('dc_status', dcData);
-        
+
         await updateDiscordStatsEmbed(guild, dcData);
-        
+
         console.log('✅ DC Status updated:', onlineMembers + '/' + guild.memberCount, 'online |', openTickets, 'open tickets');
-        
+
     } catch (err) {
         console.error('❌ fetchDiscordStats error:', err.message);
     }
@@ -1014,11 +1012,11 @@ async function saveToSupabase(key, data) {
         console.error('❌ SUPABASE credentials missing!');
         return;
     }
-    
+
     const valueJson = JSON.stringify(data);
     const patchPayload = JSON.stringify({ value: valueJson });
     const urlObj = new URL(SUPABASE_URL + '/rest/v1/settings');
-    
+
     const options = {
         hostname: urlObj.hostname,
         path: urlObj.pathname + '?key=eq.' + key,
@@ -1030,7 +1028,7 @@ async function saveToSupabase(key, data) {
             'Content-Length': Buffer.byteLength(patchPayload)
         }
     };
-    
+
     return new Promise((resolve, reject) => {
         const req = https.request(options, res => {
             let body = '';
@@ -1054,7 +1052,7 @@ async function insertToSupabase(key, data) {
     const valueJson = JSON.stringify(data);
     const payload = JSON.stringify({ key: key, value: valueJson });
     const urlObj = new URL(SUPABASE_URL + '/rest/v1/settings');
-    
+
     const options = {
         hostname: urlObj.hostname,
         path: urlObj.pathname,
@@ -1067,7 +1065,7 @@ async function insertToSupabase(key, data) {
             'Content-Length': Buffer.byteLength(payload)
         }
     };
-    
+
     return new Promise((resolve, reject) => {
         const req = https.request(options, res => {
             let body = '';
@@ -1225,7 +1223,7 @@ client.on('messageCreate', async (message) => {
         let attachmentUrl = null;
         let cleanFileName = null;
         if (message.attachments && message.attachments.size > 0) {
-            const htmlAttachment = message.attachments.find(att => 
+            const htmlAttachment = message.attachments.find(att =>
                 att.name && att.name.endsWith('.html')
             );
             if (htmlAttachment) {
@@ -1271,7 +1269,7 @@ client.on('messageCreate', async (message) => {
             // Transcript-based data extraction
             let openedAt = transcriptContent ? extractTicketOpenedAt(transcriptContent) : null;
             if (!openedAt) openedAt = new Date().toISOString();
-            
+
             const openedByUsername = transcriptContent ? extractOpenedByUsername(transcriptContent) : null;
 
             // Extract channel name from HTML title to find the handler
@@ -1281,18 +1279,18 @@ client.on('messageCreate', async (message) => {
                 if (titleMatch) {
                     let title = titleMatch[1].toLowerCase().trim();
                     if (title.includes(' - ')) title = title.split(' - ').pop().trim();
-                    
+
                     // Ticket Tool sometimes prepends "transcript " to the title
                     title = title.replace(/^transcript\s*[-:]?\s*/i, '').trim();
-                    
+
                     let handlerStr = title.replace(/^(support|ticket|case|closed)(-\d+)?-?/i, '').trim();
-                    
+
                     // Remove suffixes like -c, -closed
                     handlerStr = handlerStr.replace(/-c$/i, '').replace(/-closed$/i, '').trim();
-                    
+
                     // Remove special characters (like ༃) so exact matching works
                     handlerStr = handlerStr.replace(/[^\w\s-]/g, '').trim();
-                    
+
                     if (handlerStr.length > 2 && !handlerStr.match(/^#?\d+$/)) {
                         handlerUsername = handlerStr;
                     }
@@ -1347,7 +1345,7 @@ client.on('messageCreate', async (message) => {
                         ticketData.ticketOwnerName = member.user.username;
                         ticketData.ticketOwnerDisplay = member.displayName;
                     }
-                } catch(E) {}
+                } catch (E) { }
             }
 
             const allTickets = loadTickets();
