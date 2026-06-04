@@ -1156,6 +1156,9 @@ client.on('messageCreate', async (message) => {
                     let title = titleMatch[1].toLowerCase().trim();
                     if (title.includes(' - ')) title = title.split(' - ').pop().trim();
                     
+                    // Ticket Tool sometimes prepends "transcript " to the title
+                    title = title.replace(/^transcript\s*[-:]?\s*/i, '').trim();
+                    
                     let handlerStr = title.replace(/^(support|ticket|case|closed)(-\d+)?-?/i, '').trim();
                     
                     // Remove suffixes like -c, -closed
