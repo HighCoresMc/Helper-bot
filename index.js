@@ -1145,7 +1145,30 @@ client.on('messageCreate', async (message) => {
             // Transcript-based data extraction
             const openedAt = transcriptContent ? extractTicketOpenedAt(transcriptContent) : null;
             const openedByUsername = transcriptContent ? extractOpenedByUsername(transcriptContent) : null;
-            const handlerUsername = transcriptContent ? extractHandlerFromTranscript(transcriptContent, openedByUsername) : null;
+
+            // Extract channel name from HTML title to find the handler
+            let handlerUsername = null;
+            if (transcriptContent) {
+                const titleMatch = transcriptContent.match(/<title>([^<]+)<\/title>/i);
+                if (titleMatch) {
+                    let title = titleMatch[1].toLowerCase().trim();
+                    if (title.includes(' - ')) title = title.split(' - ').pop().trim();
+                    let handlerStr = title.replace(/^(support|ticket|case|closed)(-\d+)?-?/i, '').trim();
+                    
+                    // Remove special characters (like ༃) so exact matching works
+                    handlerStr = handlerStr.replace(/[^\w\s-]/g, '').trim();
+                    
+                    if (handlerStr.length > 2 && !handlerStr.match(/^#?\d+$/)) {
+                        handlerUsername = handlerStr;
+                    }
+                }
+            }
+
+            // Fallback to extracting from messages
+            if (!handlerUsername && transcriptContent) {
+                handlerUsername = extractHandlerFromTranscript(transcriptContent, openedByUsername);
+            }
+
             const responseTime = formatResponseTime(openedAt);
 
             if (handlerUsername) console.log(`🔍 Handler from transcript: "${handlerUsername}"`);
