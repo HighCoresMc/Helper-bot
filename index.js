@@ -408,7 +408,7 @@ async function analyzeTicketWithAI(transcriptHtml, handlerName) {
         const transcriptText = extractTextFromTranscript(transcriptHtml);
         const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
         // Using standard flash model
-        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash", generationConfig: { responseMimeType: "application/json" } });
+        const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest", generationConfig: { responseMimeType: "application/json" } });
 
         const prompt = `
 You are an expert AI evaluating a Discord admin's performance in a support ticket.
@@ -449,8 +449,20 @@ Transcript:
 ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 `;
 
-        const result = await model.generateContent(prompt);
-        const response = result.response.text();
+        let result;
+        try {
+            result = await model.generateContent(prompt);
+        } catch (e) {
+            console.log("⚠️ Failed with gemini-1.5-flash-latest, trying fallback gemini-pro...");
+            const fallbackModel = genAI.getGenerativeModel({ model: "gemini-pro" });
+            result = await fallbackModel.generateContent(prompt);
+        }
+        
+        let response = result.response.text();
+        
+        // Clean up response if it contains markdown (like ```json ... ```)
+        response = response.replace(/```json/gi, '').replace(/```/g, '').trim();
+        
         const json = JSON.parse(response);
 
         // Sum points safely just in case AI didn't
@@ -690,11 +702,11 @@ async function saveTicketToSupabase(ticketData) {
 
         const doInsert = (payload) => {
             const payloadStr = JSON.stringify(payload);
-            const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets');
+            const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets?on_conflict=ticket_id');
             return new Promise((resolve) => {
                 const options = {
                     hostname: insertUrl.hostname,
-                    path: insertUrl.pathname,
+                    path: insertUrl.pathname + insertUrl.search,
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
