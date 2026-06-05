@@ -692,20 +692,21 @@ async function saveTicketToSupabase(ticketData) {
 
             try {
                 const actionVerb = ptsToAward > 0 ? 'added' : (ptsToAward < 0 ? 'deducted' : 'added');
+                const preposition = ptsToAward > 0 ? 'to' : (ptsToAward < 0 ? 'from' : 'to');
                 
-                // Log 1: For 'Recent Activities' (Points category, empName as user)
+                // Log 1: For 'Recent Activities' (Points category, System as user)
                 const logRecent = JSON.stringify({
                     action_type: 'Update Points', 
-                    details: `Successfully ${actionVerb} ${Math.abs(ptsToAward)} points to ${empName}. Reason: Ticket ${ticketData.ticketName} Evaluation`,
+                    details: `Successfully ${actionVerb} ${Math.abs(ptsToAward)} points ${preposition} ${empName}. Reason: Ticket ${ticketData.ticketName} Evaluation`,
                     category: 'Points',
-                    user_name: empName,
+                    user_name: 'System',
                     created_at: new Date().toISOString()
                 });
                 
                 // Log 2: For 'Activity Logs' full table (Tickets category, System as user, detailed breakdown)
                 const logFull = JSON.stringify({
                     action_type: 'Closed Ticket',
-                    details: `[AI Evaluation] Awarded ${ptsToAward} PTS to ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
+                    details: `[AI Evaluation] Awarded ${ptsToAward} PTS From ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
                     category: 'Tickets',
                     user_name: 'System',
                     created_at: new Date().toISOString()
