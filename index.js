@@ -691,15 +691,29 @@ async function saveTicketToSupabase(ticketData) {
             });
 
             try {
-                const logPayload = JSON.stringify({
+                const actionVerb = ptsToAward > 0 ? 'added' : (ptsToAward < 0 ? 'deducted' : 'added');
+                
+                // Log 1: For 'Recent Activities' (Points category, empName as user)
+                const logRecent = JSON.stringify({
+                    action_type: 'Update Points', 
+                    details: `Successfully ${actionVerb} ${Math.abs(ptsToAward)} points to ${empName}. Reason: Ticket ${ticketData.ticketName} Evaluation`,
+                    category: 'Points',
+                    user_name: empName,
+                    created_at: new Date().toISOString()
+                });
+                
+                // Log 2: For 'Activity Logs' full table (Tickets category, System as user, detailed breakdown)
+                const logFull = JSON.stringify({
                     action_type: 'Closed Ticket',
                     details: `[AI Evaluation] Awarded ${ptsToAward} PTS to ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
                     category: 'Tickets',
                     user_name: 'System',
                     created_at: new Date().toISOString()
                 });
+
                 const logUrl = new URL(SUPABASE_URL + '/rest/v1/activity_log');
-                await new Promise((resolve) => {
+                
+                const sendLog = (payloadStr) => new Promise((resolveLog) => {
                     const options = {
                         hostname: logUrl.hostname,
                         path: logUrl.pathname,
@@ -708,20 +722,21 @@ async function saveTicketToSupabase(ticketData) {
                             'Content-Type': 'application/json',
                             'apikey': SUPABASE_KEY,
                             'Authorization': 'Bearer ' + SUPABASE_KEY,
-                            'Prefer': 'return=minimal',
-                            'Content-Length': Buffer.byteLength(logPayload)
+                            'Content-Length': Buffer.byteLength(payloadStr)
                         }
                     };
-                    const req = https.request(options, res => {
-                        res.on('data', () => { });
-                        res.on('end', () => resolve());
+                    const reqLog = https.request(options, res => {
+                        res.on('data', () => {});
+                        res.on('end', resolveLog);
                     });
-                    req.on('error', () => resolve());
-                    req.write(logPayload);
-                    req.end();
+                    reqLog.on('error', resolveLog);
+                    reqLog.write(payloadStr);
+                    reqLog.end();
                 });
-            } catch (e) { 
-                console.error("❌ Error logging activity:", e.message);
+
+                await Promise.all([sendLog(logRecent), sendLog(logFull)]);
+            } catch (err) {
+                console.error('Failed to log activity:', err.message);
             }
         }
 
