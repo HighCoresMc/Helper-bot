@@ -702,11 +702,13 @@ async function saveTicketToSupabase(ticketData) {
                     user_name: 'System',
                     created_at: new Date().toISOString()
                 });
+
+                const actionVerbFull = ptsToAward > 0 ? 'Awarded' : (ptsToAward < 0 ? 'Deducted' : 'Awarded');
                 
                 // Log 2: For 'Activity Logs' full table (Tickets category, System as user, detailed breakdown)
                 const logFull = JSON.stringify({
                     action_type: 'Closed Ticket',
-                    details: `[AI Evaluation] Awarded ${ptsToAward} PTS From ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
+                    details: `[AI Evaluation] ${actionVerbFull} ${Math.abs(ptsToAward)} PTS ${preposition} ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
                     category: 'Tickets',
                     user_name: 'System',
                     created_at: new Date().toISOString()
