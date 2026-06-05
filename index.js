@@ -322,6 +322,18 @@ function extractTicketOpenedAt(transcriptContent) {
     return new Date(parsed.getTime() - 3 * 60 * 60 * 1000).toISOString();
 }
 
+// Helpers — Extract Ticket Type From Transcript
+function extractTicketType(transcriptContent) {
+    if (!transcriptContent) return null;
+    const m = transcriptContent.match(/Type<\/div>\s*<div[^>]*>(?:<[^>]+>)*([^<]+)</i);
+    if (m && m[1]) {
+        const type = m[1].trim().toUpperCase();
+        // Ignore if it accidentally matched something super long or weird
+        if (type.length > 1 && type.length < 20) return type;
+    }
+    return null;
+}
+
 // Helpers — Extract Opened By Username From Transcript
 function extractOpenedByUsername(transcriptContent) {
     const m = transcriptContent.match(/Opened By<\/div>\s*<div[^>]*>([^<]+)</);
@@ -1335,7 +1347,10 @@ client.on('messageCreate', async (message) => {
             if (openedAt) console.log(`⏰ Opened at (UTC): ${openedAt}, response time: ${responseTime}`);
 
             let panelName = 'Ticket';
-            if (ticketName && ticketName.includes('-')) {
+            const transcriptType = transcriptContent ? extractTicketType(transcriptContent) : null;
+            if (transcriptType) {
+                panelName = transcriptType;
+            } else if (ticketName && ticketName.includes('-')) {
                 const firstPart = ticketName.split('-')[0];
                 panelName = firstPart.charAt(0).toUpperCase() + firstPart.slice(1);
             }
