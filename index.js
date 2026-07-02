@@ -890,23 +890,42 @@ async function fetchMCStatus() {
                     if (embed.description) {
                         const desc = embed.description;
 
-                        const pingMatch = desc.match(/Server Ping[^\d]*(\d+)/i);
+                        // Status detection from description text/emoji
+                        if (desc.includes('🟢') || /open|players can join/i.test(desc)) {
+                            mcData.serverStatus = 'Online';
+                        }
+                        if (desc.includes('🔴') || /server is offline|server is down/i.test(desc)) {
+                            mcData.serverStatus = 'Offline';
+                        }
+
+                        const pingMatch = desc.match(/(?:Server\s+)?Ping[^\d]*(\d+)/i);
                         if (pingMatch) mcData.serverPing = pingMatch[1] + 'ms';
 
                         const healthMatch = desc.match(/Health[^\d]*([\d.]+)/i);
                         if (healthMatch) mcData.health = healthMatch[1] + '%';
 
-                        const peakMatch = desc.match(/Peak Players[^\d]*(\d+)/i);
+                        const peakMatch = desc.match(/Peak\s+Players[^\d]*(\d+)/i);
                         if (peakMatch) mcData.peakPlayers = peakMatch[1];
 
-                        const loginsMatch = desc.match(/Total Logins[^\d]*(\d+)/i);
+                        const loginsMatch = desc.match(/Total\s+Logins[^\d]*(\d+)/i);
                         if (loginsMatch) mcData.totalLogins = loginsMatch[1];
 
                         const availMatch = desc.match(/Availability[^\d]*([\d.]+)/i);
                         if (availMatch) mcData.availability = availMatch[1] + '%';
 
-                        const ipMatch = desc.match(/Server IP[^\d]*([\d.:]+)/i);
+                        const ipMatch = desc.match(/(?:Java\s+)?IP[^\d]*([\d.:]+)/i);
                         if (ipMatch) mcData.serverIP = ipMatch[1];
+
+                        // Players from description
+                        const playersDesc = desc.match(/Players\s+Online[^\d]*(\d+)\s*[\/|]\s*(\d+)/i);
+                        if (playersDesc) {
+                            mcData.playersOnline = playersDesc[1];
+                            mcData.maxPlayers = playersDesc[2];
+                        }
+
+                        // Uptime from description
+                        const uptimeDesc = desc.match(/Uptime[:\s]*(\d+h\s*\d+m(?:\s*\d+s)?|\d+m(?:\s*\d+s)?)/i);
+                        if (uptimeDesc) mcData.uptime = uptimeDesc[1].trim();
                     }
 
                     if (embed.fields && embed.fields.length > 0) {
