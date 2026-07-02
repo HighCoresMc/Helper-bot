@@ -465,10 +465,10 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 
         let responseText = null;
         const modelsToTry = [
-            "gemini-2.5-flash",
-            "gemini-2.5-flash-8b",
-            "gemini-1.5-flash"
-        ];
+        'gemini-1.5-flash',
+        'gemini-1.5-pro',
+        'gemini-1.0-pro'
+    ];
 
         for (const modelName of modelsToTry) {
             try {
@@ -874,32 +874,30 @@ async function fetchMCStatus() {
             }
         }
 
-        // Direct MC Server API Query — primary source (fixes Components V2 embed unreadability)
+        // Direct MC Server API Query
         await new Promise((resolveApi) => {
             let apiTarget = MC_SERVER_IP;
-            // The API expects 'ip' or 'ip:port'. Standard Minecraft port is 25565.
-            // If the port is something else (like 25577), we should include it.
-            https.get(`https://api.mcsrvstat.us/3/${apiTarget}`, { rejectUnauthorized: false }, (res) => {
+            const options = { 
+                rejectUnauthorized: false,
+                headers: { 'User-Agent': 'HighCoreMC-Discord-Bot/1.0' }
+            };
+            https.get(`https://api.mcsrvstat.us/3/${apiTarget}`, options, (res) => {
                 let raw = '';
                 res.on('data', c => raw += c);
                 res.on('end', () => {
-                    try {
-                        // Prevent JSON parse error if blocked by cloudflare (starts with < or Y)
-                        if (!raw.startsWith('{')) throw new Error(raw.substring(0, 50));
-                        
-                        const json = JSON.parse(raw);
-                        if (json.online) {
-                            mcData.serverStatus = 'Online';
-                            mcData.playersOnline = String(json.players?.online ?? 0);
-                            mcData.maxPlayers = String(json.players?.max ?? 100);
-                            if (json.debug?.ping != null) mcData.serverPing = json.debug.ping + 'ms';
-                        } else {
-                            mcData.serverStatus = 'Offline';
-                        }
-                        console.log(`🌐 MC API: ${mcData.serverStatus} | Players: ${mcData.playersOnline}/${mcData.maxPlayers} | Ping: ${mcData.serverPing}`);
-                    } catch (e) {
-                        console.log('⚠️ MC API parse error:', e.message);
+                    // Use regex on raw string to detect online status safely
+                    if (/\{.*"online":\s*true/.test(raw)) {
+                        mcData.serverStatus = 'Online';
+                        const pMatch = raw.match(/"online":\s*(\d+)/);
+                        const mMatch = raw.match(/"max":\s*(\d+)/);
+                        const pingMatch = raw.match(/"ping":\s*(\d+)/);
+                        if (pMatch) mcData.playersOnline = pMatch[1];
+                        if (mMatch) mcData.maxPlayers = mMatch[1];
+                        if (pingMatch) mcData.serverPing = pingMatch[1] + 'ms';
+                    } else {
+                        mcData.serverStatus = 'Offline';
                     }
+                    console.log(`🌐 MC API: ${mcData.serverStatus} | Players: ${mcData.playersOnline}/${mcData.maxPlayers}`);
                     resolveApi();
                 });
             }).on('error', (e) => {
@@ -1415,10 +1413,12 @@ client.on('messageCreate', async (message) => {
             if (!handlerUsername && transcriptContent) {
                 handlerUsername = extractHandlerFromTranscript(transcriptContent, openedByUsername);
             }
-
-            const responseTime = formatResponseTime(openedAt);
-
+            if (handlerUsername && Array.isArray(handlerUsername)) {
+                if (handlerUsername.length === 0) handlerUsername = null;
+                else handlerUsername = handlerUsername.join(', ');
+            }
             if (handlerUsername) console.log(`🔍 Handler from transcript: "${handlerUsername}"`);
+            else console.log(`🔍 Handler from transcript: Not found`);
             if (openedAt) console.log(`⏰ Opened at (UTC): ${openedAt}, response time: ${responseTime}`);
 
             let panelName = 'Ticket';
