@@ -1,8 +1,8 @@
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const http = require('http');
+const https = require('HTTPS');
+const http = require('HTTP');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
@@ -77,7 +77,7 @@ async function updateOnlineAdmins() {
         });
 
         const count = onlineStaff.size;
-        const names = onlineStaff.map(m => m.displayName).join(', ');
+        const names = onlineStaff.map(M => M.displayName).join(', ');
 
         console.log('👥 Online Staff:', count, names ? '(' + names + ')' : '(none)');
 
@@ -86,7 +86,7 @@ async function updateOnlineAdmins() {
 
         const valueJson = JSON.stringify({ count, names, updated: new Date().toISOString() });
         const patchPayload = JSON.stringify({ value: valueJson });
-        const https2 = require('https');
+        const https2 = require('HTTPS');
         const urlObj = new URL(SUPABASE_URL + '/rest/v1/settings');
 
         const options = {
@@ -94,7 +94,7 @@ async function updateOnlineAdmins() {
             path: urlObj.pathname + '?key=eq.admin_online',
             method: 'PATCH',
             headers: {
-                'Content-Type': 'application/json',
+                'Content-Type': 'application/JSON',
                 'apikey': SUPABASE_KEY,
                 'Authorization': 'Bearer ' + SUPABASE_KEY,
                 'Content-Length': Buffer.byteLength(patchPayload)
@@ -104,7 +104,7 @@ async function updateOnlineAdmins() {
         await new Promise((resolve, reject) => {
             const req = https2.request(options, res => {
                 let body = '';
-                res.on('data', c => body += c);
+                res.on('data', C => body += C);
                 res.on('end', () => {
                     if (res.statusCode >= 400) {
                         console.error('Supabase error:', res.statusCode, body);
@@ -155,16 +155,16 @@ function githubApiRequest(method, path, body) {
             headers: {
                 'Authorization': `token ${GITHUB_TOKEN}`,
                 'User-Agent': 'Ticket-Bot',
-                'Accept': 'application/vnd.github.v3+json',
-                ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {})
+                'Accept': 'application/vnd.github.v3+JSON',
+                ...(payload ? { 'Content-Type': 'application/JSON', 'Content-Length': Buffer.byteLength(payload) } : {})
             }
         };
         const req = https.request(options, res => {
             let data = '';
-            res.on('data', c => data += c);
+            res.on('data', C => data += C);
             res.on('end', () => {
                 try { resolve({ status: res.statusCode, body: JSON.parse(data) }); }
-                catch (e) { resolve({ status: res.statusCode, body: data }); }
+                catch (E) { resolve({ status: res.statusCode, body: data }); }
             });
         });
         req.on('error', reject);
@@ -226,8 +226,8 @@ async function uploadTranscriptToGitHub() { }
 // Helpers — Download File
 function downloadFile(url, filepath) {
     return new Promise((resolve, reject) => {
-        const protocol = url.startsWith('https') ? https : http;
-        const options = url.startsWith('https') ? { rejectUnauthorized: false } : {};
+        const protocol = url.startsWith('HTTPS') ? https : http;
+        const options = url.startsWith('HTTPS') ? { rejectUnauthorized: false } : {};
 
         const file = fs.createWriteStream(filepath);
         protocol.get(url, options, (response) => {
@@ -318,9 +318,9 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
 
 // Helpers — Extract Opened At From Transcript
 function extractTicketOpenedAt(transcriptContent) {
-    const m = transcriptContent.match(/Opened At<\/div>\s*<div[^>]*>([^<]+)</);
-    if (!m) return null;
-    const raw = m[1].trim().replace('\u00b7', '').replace(/\s+/g, ' ').trim();
+    const M = transcriptContent.match(/Opened At<\/div>\s*<div[^>]*>([^<]+)</);
+    if (!M) return null;
+    const raw = M[1].trim().replace('\u00b7', '').replace(/\s+/g, ' ').trim();
     const parsed = new Date(raw);
     if (isNaN(parsed.getTime())) return null;
     return new Date(parsed.getTime() - 3 * 60 * 60 * 1000).toISOString();
@@ -329,9 +329,9 @@ function extractTicketOpenedAt(transcriptContent) {
 // Helpers — Extract Ticket Type From Transcript
 function extractTicketType(transcriptContent) {
     if (!transcriptContent) return null;
-    const m = transcriptContent.match(/Type<\/div>\s*<div[^>]*>(?:<[^>]+>)*([^<]+)</i);
-    if (m && m[1]) {
-        const type = m[1].trim().toUpperCase();
+    const M = transcriptContent.match(/Type<\/div>\s*<div[^>]*>(?:<[^>]+>)*([^<]+)</i);
+    if (M && M[1]) {
+        const type = M[1].trim().toUpperCase();
         // Ignore if it accidentally matched something super long or weird
         if (type.length > 1 && type.length < 20) return type;
     }
@@ -340,8 +340,8 @@ function extractTicketType(transcriptContent) {
 
 // Helpers — Extract Opened By Username From Transcript
 function extractOpenedByUsername(transcriptContent) {
-    const m = transcriptContent.match(/Opened By<\/div>\s*<div[^>]*>([^<]+)</);
-    return m ? m[1].trim() : null;
+    const M = transcriptContent.match(/Opened By<\/div>\s*<div[^>]*>([^<]+)</);
+    return M ? M[1].trim() : null;
 }
 
 // Helpers — Format Response Time
@@ -362,14 +362,14 @@ async function resolveDisplayNameToDiscordId(displayName) {
         const guild = client.guilds.cache.get(GUILD_ID);
         if (!guild) return null;
         const clean = displayName.replace(/^@/, '').trim().toLowerCase();
-        const member = guild.members.cache.find(m =>
-            m.displayName.toLowerCase() === clean ||
-            m.user.username.toLowerCase() === clean ||
-            m.displayName.toLowerCase().includes(clean) ||
-            clean.includes(m.displayName.toLowerCase())
+        const member = guild.members.cache.find(M =>
+            M.displayName.toLowerCase() === clean ||
+            M.user.username.toLowerCase() === clean ||
+            M.displayName.toLowerCase().includes(clean) ||
+            clean.includes(M.displayName.toLowerCase())
         );
         return member ? member.id : null;
-    } catch (e) {
+    } catch (E) {
         return null;
     }
 }
@@ -390,8 +390,8 @@ async function lookupEmployee(identifier) {
         };
         const req = https.request(options, res => {
             let body = '';
-            res.on('data', c => body += c);
-            res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { resolve([]); } });
+            res.on('data', C => body += C);
+            res.on('end', () => { try { resolve(JSON.parse(body)); } catch (E) { resolve([]); } });
         });
         req.on('error', () => resolve([]));
         req.end();
@@ -609,7 +609,7 @@ async function saveTicketToSupabase(ticketData) {
                                     path: insertEmpUrl.pathname,
                                     method: 'POST',
                                     headers: {
-                                        'Content-Type': 'application/json',
+                                        'Content-Type': 'application/JSON',
                                         'apikey': SUPABASE_KEY,
                                         'Authorization': 'Bearer ' + SUPABASE_KEY,
                                         'Prefer': 'return=minimal',
@@ -628,8 +628,8 @@ async function saveTicketToSupabase(ticketData) {
                             console.log(`✅ Auto-created employee: ${displayName}`);
                         }
                     }
-                } catch (e) {
-                    console.error('Auto-create employee error:', e.message);
+                } catch (E) {
+                    console.error('Auto-create employee error:', E.message);
                 }
             }
         }
@@ -679,7 +679,7 @@ async function saveTicketToSupabase(ticketData) {
                     path: empPatchUrl.pathname + empPatchUrl.search,
                     method: 'PATCH',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/JSON',
                         'apikey': SUPABASE_KEY,
                         'Authorization': 'Bearer ' + SUPABASE_KEY,
                         'Content-Length': Buffer.byteLength(patchPayload)
@@ -900,8 +900,8 @@ async function fetchMCStatus() {
                     console.log(`🌐 MC API: ${mcData.serverStatus} | Players: ${mcData.playersOnline}/${mcData.maxPlayers}`);
                     resolveApi();
                 });
-            }).on('error', (e) => {
-                console.log('⚠️ MC API fetch error:', e.message);
+            }).on('error', (E) => {
+                console.log('⚠️ MC API fetch error:', E.message);
                 resolveApi();
             });
         });
@@ -987,7 +987,7 @@ async function fetchMCStatus() {
                                 const loginsVal = value.match(/\d+/);
                                 if (loginsVal) mcData.totalLogins = loginsVal[0];
                             }
-                            else if (name.includes('server ip') || name.includes('ip')) {
+                            else if (name.includes('server IP') || name.includes('IP')) {
                                 mcData.serverIP = value.split('\n')[0].trim();
                             }
                         });
@@ -1014,8 +1014,8 @@ async function fetchDiscordStats() {
         const guild = client.guilds.cache.get(GUILD_ID);
         if (!guild) return;
 
-        const onlineMembers = guild.members.cache.filter(m =>
-            m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)
+        const onlineMembers = guild.members.cache.filter(M =>
+            M.presence && ['online', 'dnd', 'idle'].includes(M.presence.status)
         ).size;
 
         const ticketCategory = guild.channels.cache.get(TICKET_CATEGORY_ID);
@@ -1041,11 +1041,11 @@ async function fetchDiscordStats() {
 
                 const req = https.request(options, res => {
                     let body = '';
-                    res.on('data', c => body += c);
+                    res.on('data', C => body += C);
                     res.on('end', () => {
                         try {
                             resolve(JSON.parse(body));
-                        } catch (e) {
+                        } catch (E) {
                             resolve([]);
                         }
                     });
@@ -1055,18 +1055,19 @@ async function fetchDiscordStats() {
             });
 
             if (Array.isArray(ticketsResponse)) {
-                ticketsResponse.forEach(t => {
-                    if (t.status === 'open' || t.status === 'Open' || t.status === 'pending') {
+                ticketsResponse.forEach(T => {
+                    if (T.status === 'open' || T.status === 'Open' || T.status === 'pending') {
                         openTickets++;
                     } else {
                         closedTickets++;
                     }
                 });
             }
-        } catch (e) {
-            console.log('Could not fetch tickets count:', e.message);
+        } catch (E) {
+            console.log('Could not fetch tickets count:', E.message);
         }
 
+        
         const dcData = {
             totalMembers: guild.memberCount,
             onlineMembers: onlineMembers,
@@ -1076,7 +1077,7 @@ async function fetchDiscordStats() {
             boostCount: guild.premiumSubscriptionCount || 0,
             openTickets: openTickets,
             closedTickets: closedTickets,
-            onlineStaff: guild.members.cache.filter(m => m.roles.cache.has(STAFF_ROLE_ID) && m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)).size,
+            onlineStaff: guild.members.cache.filter(M => M.roles.cache.has(STAFF_ROLE_ID) && M.presence && ['online', 'dnd', 'idle'].includes(M.presence.status)).size,
             lastUpdated: new Date().toISOString()
         };
 
