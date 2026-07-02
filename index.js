@@ -17,6 +17,7 @@ const TICKET_CATEGORY_ID = '1487143174567628840';
 const MC_STATUS_CHANNEL_ID = process.env.MC_STATUS_CHANNEL_ID || '1487139736748425236';
 const MC_STATUS_MESSAGE_ID = process.env.MC_STATUS_MESSAGE_ID || '1508162784339165376';
 const MC_LOGS_CHANNEL_ID = process.env.MC_LOGS_CHANNEL_ID || '1487148944667578368';
+const MC_SERVER_IP = process.env.MC_SERVER_IP || '198.186.130.122:25577';
 
 // GitHub
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -871,6 +872,34 @@ async function fetchMCStatus() {
                 mcData.serverStatus = 'Online';
             }
         }
+
+        // Direct MC Server API Query — primary source (fixes Components V2 embed unreadability)
+        await new Promise((resolveApi) => {
+            https.get(`https://api.mcsrvstat.us/3/${MC_SERVER_IP}`, { rejectUnauthorized: false }, (res) => {
+                let raw = '';
+                res.on('data', c => raw += c);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(raw);
+                        if (json.online) {
+                            mcData.serverStatus = 'Online';
+                            mcData.playersOnline = String(json.players?.online ?? 0);
+                            mcData.maxPlayers = String(json.players?.max ?? 100);
+                            if (json.debug?.ping != null) mcData.serverPing = json.debug.ping + 'ms';
+                        } else {
+                            mcData.serverStatus = 'Offline';
+                        }
+                        console.log(`🌐 MC API: ${mcData.serverStatus} | Players: ${mcData.playersOnline}/${mcData.maxPlayers} | Ping: ${mcData.serverPing}`);
+                    } catch (e) {
+                        console.log('⚠️ MC API parse error:', e.message);
+                    }
+                    resolveApi();
+                });
+            }).on('error', (e) => {
+                console.log('⚠️ MC API fetch error:', e.message);
+                resolveApi();
+            });
+        });
 
         // Status Embed
         try {
