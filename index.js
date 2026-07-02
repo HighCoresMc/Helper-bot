@@ -450,12 +450,12 @@ Transcript:
 ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 `;
 
-        const modelsToTry = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-pro-latest'];
+        const modelsToTry = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
         let responseText = null;
 
         for (const modelName of modelsToTry) {
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
