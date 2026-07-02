@@ -467,7 +467,7 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 
         for (const modelName of modelsToTry) {
             try {
-                const response = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/\${modelName}:generateContent?key=\${process.env.GEMINI_API_KEY}\`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${process.env.GEMINI_API_KEY}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -489,7 +489,7 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
                     throw new Error("Empty response from API");
                 }
             } catch (e) {
-                console.log(\`⚠️ Failed with \${modelName}: \${e.message}\`);
+                console.log(`⚠️ Failed with ${modelName}: ${e.message}`);
             }
         }
 
@@ -498,14 +498,14 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
             return { totalPoints: 0, breakdown: { error: "Failed" }, reasoning: "AI Error: All models failed" };
         }
 
-        let cleanJson = responseText.replace(/\\s*\`\`\`json/gi, '').replace(/\`\`\`/g, '').trim();
+        let cleanJson = responseText.replace(/\s*```json/gi, '').replace(/```/g, '').trim();
         const json = JSON.parse(cleanJson);
         
         // Calculate total manually to be safe
         const calculatedTotal = (json.ticket_type_points || 0) + (json.responses_points || 0) + (json.level_speed_points || 0);
         const finalPoints = json.total_points !== undefined ? json.total_points : calculatedTotal;
 
-        console.log(\`✅ AI Analysis complete! Awarded \${finalPoints} points. Reasoning: \${json.reasoning}\`);
+        console.log(`✅ AI Analysis complete! Awarded ${finalPoints} points. Reasoning: ${json.reasoning}`);
         return {
             totalPoints: finalPoints,
             breakdown: json,
