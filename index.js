@@ -448,56 +448,74 @@ Read the following transcript and calculate their points based ONLY on these rul
 - Handled hard ticket in < 10 mins = +8 pts
 - Handled ticket (general) in < 30 mins = +2 pts
 - Handled any ticket > 1 hour = -4 pts
-(Pick the ONE best fit. Guess the speed/difficulty based on the conversation if timestamps aren't fully clear).
+You are a Minecraft server administrator evaluator. Your task is to evaluate the support provided in the following ticket transcript.
+The ticket was handled by: ${handlerUsername || 'Unknown'}.
 
-Return ONLY a JSON object with this exact structure:
+Rules for points:
+- Responding within 2 minutes of the ticket opening: +1 point.
+- Polite and professional greeting: +1 point.
+- Solving the core issue efficiently: +2 points.
+- Proper grammar and formatting: +1 point.
+Total possible points: 5.
+
+Return your evaluation as a valid JSON object EXACTLY like this (do not use markdown formatting, just raw JSON):
 {
-  "ticket_type_points": 0,
-  "responses_points": 0,
-  "level_speed_points": 0,
-  "total_points": 0,
-  "reasoning": "Short explanation of why these points were awarded"
+    "totalPoints": 5,
+    "breakdown": {
+        "fast_response": 1,
+        "polite_greeting": 1,
+        "issue_solved": 2,
+        "grammar": 1
+    },
+    "reasoning": "Brief explanation of the score here."
 }
 
 Transcript:
 ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 `;
 
+        const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
         let responseText = null;
-        const modelsToTry = [
-            'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-1.0-pro'
-        ];
 
         for (const modelName of modelsToTry) {
             try {
-                const currentModel = genAI.getGenerativeModel({ model: modelName, generationConfig: { responseMimeType: "application/json" } });
-                const result = await currentModel.generateContent(prompt);
-                responseText = result.response.text();
-                break; // Success! Break out of the loop
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: prompt }] }],
+                        generationConfig: { responseMimeType: "application/json" }
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.error) {
+                    throw new Error(data.error.message);
+                }
+
+                if (data.candidates && data.candidates.length > 0 && data.candidates[0].content.parts.length > 0) {
+                    responseText = data.candidates[0].content.parts[0].text;
+                    break; // Success!
+                } else {
+                    throw new Error("Empty response from API");
+                }
             } catch (e) {
                 console.log(`⚠️ Failed with ${modelName}: ${e.message}`);
             }
         }
 
         if (!responseText) {
-            console.log("❌ All Gemini models failed.");
-            return { totalPoints: 5, breakdown: { error: "All models failed" }, reasoning: "AI Error: All models failed" };
+            console.log("❌ All Gemini models failed via direct API.");
+            return { totalPoints: 5, breakdown: { error: "Failed" }, reasoning: "AI Error: All models failed" };
         }
 
-        // Clean up response if it contains markdown (like ```json ... ```)
-        let response = responseText.replace(/```json/gi, '').replace(/```/g, '').trim();
-
-        const json = JSON.parse(response);
-
-        // Sum points safely just in case AI didn't
-        const total = (json.ticket_type_points || 0) + (json.responses_points || 0) + (json.level_speed_points || 0);
-        json.total_points = total;
-
+        let cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const json = JSON.parse(cleanJson);
+        console.log(`✅ AI Analysis complete! Awarded ${json.totalPoints} points. Reasoning: ${json.reasoning}`);
         return {
-            totalPoints: total || 5, // Fallback to 5 if 0 or error
-            breakdown: json,
+            totalPoints: json.totalPoints || 5,
+            breakdown: json.breakdown || {},
             reasoning: json.reasoning || "Analyzed successfully"
         };
     } catch (e) {
