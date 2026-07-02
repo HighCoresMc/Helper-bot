@@ -466,8 +466,8 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
         let responseText = null;
         const modelsToTry = [
             'gemini-1.5-flash',
-            'gemini-1.5-pro',
-            'gemini-1.0-pro'
+            'gemini-1.5-flash-latest',
+            'gemini-pro'
         ];
 
         for (const modelName of modelsToTry) {
