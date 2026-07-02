@@ -27,7 +27,7 @@ const GITHUB_FILE_PATH = 'tickets.js';
 
 // Discord Stats
 const DC_STATS_CHANNEL_ID = '1495819247685996844';
-const DC_STATS_MESSAGE_ID = process.env.DC_STATS_MESSAGE_ID || 'your_dc_status_msg_id';
+const DC_STATS_MESSAGE_ID = process.env.DC_STATS_MESSAGE_ID || '1508162784339165376';
 
 // Transcripts Folder
 if (!fs.existsSync(TRANSCRIPTS_FOLDER)) {
@@ -1417,6 +1417,9 @@ client.on('messageCreate', async (message) => {
                 if (handlerUsername.length === 0) handlerUsername = null;
                 else handlerUsername = handlerUsername.join(', ');
             }
+
+            const responseTime = formatResponseTime(openedAt);
+
             if (handlerUsername) console.log(`🔍 Handler from transcript: "${handlerUsername}"`);
             else console.log(`🔍 Handler from transcript: Not found`);
             if (openedAt) console.log(`⏰ Opened at (UTC): ${openedAt}, response time: ${responseTime}`);
