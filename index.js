@@ -424,38 +424,50 @@ async function analyzeTicketWithAI(transcriptHtml, handlerName) {
         const transcriptText = extractTextFromTranscript(transcriptHtml);
 
         const prompt = `
-You are a Minecraft server administrator evaluator. Your task is to evaluate the support provided in the following ticket transcript.
-The ticket was handled by: ${handlerName || 'Unknown'}.
+You are an expert AI evaluating a Discord admin's performance in a support ticket.
+The admin's name is "${handlerName}".
+Read the following transcript and calculate their points based ONLY on these rules:
 
-Rules for points:
-- Responding within 2 minutes of the ticket opening: +1 point.
-- Polite and professional greeting: +1 point.
-- Solving the core issue efficiently: +2 points.
-- Proper grammar and formatting: +1 point.
-Total possible points: 5.
+1. Ticket Type (ID 20):
+- Claiming the ticket (default) = +2 pts
+- Whitelist ticket handled professionally/perfectly = +5 pts
+- Support ticket handled professionally = +7 pts
+- Team ticket handled professionally & fast = +10 pts
+- Complaint ticket handled professionally = +4 pts
+(Pick the ONE best fit for the overall ticket type and handling quality)
 
-Return your evaluation as a valid JSON object EXACTLY like this (do not use markdown formatting, just raw JSON):
+2. Responses (ID 21):
+- Official/formal response = +2 pts
+- Helpful and explanatory response = +3 pts
+- Trolling or unhelpful response = -4 pts
+(Pick the ONE best fit based on their replies)
+
+3. Ticket Level/Speed (ID 22):
+- Handled easy ticket in < 10 mins = +4 pts
+- Handled hard ticket in < 10 mins = +8 pts
+- Handled ticket (general) in < 30 mins = +2 pts
+- Handled any ticket > 1 hour = -4 pts
+(Pick the ONE best fit. Guess the speed/difficulty based on the conversation if timestamps aren't fully clear).
+
+Return ONLY a JSON object with this exact structure (do not use markdown formatting, just raw JSON):
 {
-    "totalPoints": 5,
-    "breakdown": {
-        "fast_response": 1,
-        "polite_greeting": 1,
-        "issue_solved": 2,
-        "grammar": 1
-    },
-    "reasoning": "Brief explanation of the score here."
+  "ticket_type_points": 0,
+  "responses_points": 0,
+  "level_speed_points": 0,
+  "total_points": 0,
+  "reasoning": "Short explanation of why these points were awarded"
 }
 
 Transcript:
 ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 `;
 
-        const modelsToTry = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-pro-latest'];
+        const modelsToTry = ['gemini-3.5-flash', 'gemini-3.1-pro-preview', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
         let responseText = null;
 
         for (const modelName of modelsToTry) {
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${GEMINI_API_KEY}`, {
+                const response = await fetch(\`https://generativelanguage.googleapis.com/v1beta/models/\${modelName}:generateContent?key=\${process.env.GEMINI_API_KEY}\`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -477,21 +489,26 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
                     throw new Error("Empty response from API");
                 }
             } catch (e) {
-                console.log(`⚠️ Failed with ${modelName}: ${e.message}`);
+                console.log(\`⚠️ Failed with \${modelName}: \${e.message}\`);
             }
         }
 
         if (!responseText) {
             console.log("❌ All Gemini models failed via direct API.");
-            return { totalPoints: 5, breakdown: { error: "Failed" }, reasoning: "AI Error: All models failed" };
+            return { totalPoints: 0, breakdown: { error: "Failed" }, reasoning: "AI Error: All models failed" };
         }
 
-        let cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+        let cleanJson = responseText.replace(/\\s*\`\`\`json/gi, '').replace(/\`\`\`/g, '').trim();
         const json = JSON.parse(cleanJson);
-        console.log(`✅ AI Analysis complete! Awarded ${json.totalPoints} points. Reasoning: ${json.reasoning}`);
+        
+        // Calculate total manually to be safe
+        const calculatedTotal = (json.ticket_type_points || 0) + (json.responses_points || 0) + (json.level_speed_points || 0);
+        const finalPoints = json.total_points !== undefined ? json.total_points : calculatedTotal;
+
+        console.log(\`✅ AI Analysis complete! Awarded \${finalPoints} points. Reasoning: \${json.reasoning}\`);
         return {
-            totalPoints: json.totalPoints || 5,
-            breakdown: json.breakdown || {},
+            totalPoints: finalPoints,
+            breakdown: json,
             reasoning: json.reasoning || "Analyzed successfully"
         };
     } catch (e) {
