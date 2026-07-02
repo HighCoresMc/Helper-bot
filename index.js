@@ -294,7 +294,7 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
         seenIds.add(id);
 
         if (botNames.some(b => name.toLowerCase().includes(b))) continue;
-        // Don't skip openerId! If an admin opens it, we want them!
+        if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
 
         handlers.push(id); // Prefer returning ID directly
     }
@@ -302,12 +302,13 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
     // Fallback to name if data-user-id not found
     const seenNames = new Set();
     const nameHandlers = [];
-    const nameRegex = /class=['"]uname['"][^>]*>([^<]+)</g;
+    const nameRegex = /class=['"](?:author|uname)['"][^>]*>([^<]+)</g; // Added author for new transcript format
     while ((m = nameRegex.exec(transcriptContent)) !== null) {
         const name = m[1].trim();
         if (seenNames.has(name)) continue;
         seenNames.add(name);
         if (botNames.some(b => name.toLowerCase().includes(b))) continue;
+        if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
         nameHandlers.push(name);
     }
 
@@ -875,11 +876,17 @@ async function fetchMCStatus() {
 
         // Direct MC Server API Query — primary source (fixes Components V2 embed unreadability)
         await new Promise((resolveApi) => {
-            https.get(`https://api.mcsrvstat.us/3/${MC_SERVER_IP}`, { rejectUnauthorized: false }, (res) => {
+            let apiTarget = MC_SERVER_IP;
+            // The API expects 'ip' or 'ip:port'. Standard Minecraft port is 25565.
+            // If the port is something else (like 25577), we should include it.
+            https.get(`https://api.mcsrvstat.us/3/${apiTarget}`, { rejectUnauthorized: false }, (res) => {
                 let raw = '';
                 res.on('data', c => raw += c);
                 res.on('end', () => {
                     try {
+                        // Prevent JSON parse error if blocked by cloudflare (starts with < or Y)
+                        if (!raw.startsWith('{')) throw new Error(raw.substring(0, 50));
+                        
                         const json = JSON.parse(raw);
                         if (json.online) {
                             mcData.serverStatus = 'Online';
