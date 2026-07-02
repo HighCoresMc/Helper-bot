@@ -882,7 +882,7 @@ async function fetchMCStatus() {
 
             if (statusChannel) {
                 const message = await statusChannel.messages.fetch(MC_STATUS_MESSAGE_ID);
-                console.log('📨 Embed found, fields:', message.embeds[0]?.fields?.length || 0);
+                console.log('📨 Embed found, fields:', message.embeds[0]?.fields?.length || 0, '| desc preview:', message.embeds[0]?.description?.substring(0, 120)?.replace(/\n/g, ' ') || 'none');
 
                 if (message && message.embeds && message.embeds.length > 0) {
                     const embed = message.embeds[0];
