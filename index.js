@@ -422,34 +422,10 @@ async function analyzeTicketWithAI(transcriptHtml, handlerName) {
 
     try {
         const transcriptText = extractTextFromTranscript(transcriptHtml);
-        const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
         const prompt = `
-You are an expert AI evaluating a Discord admin's performance in a support ticket.
-The admin's name is "${handlerName}".
-Read the following transcript and calculate their points based ONLY on these rules:
-
-1. Ticket Type (ID 20):
-- Claiming the ticket (default) = +2 pts
-- Whitelist ticket handled professionally/perfectly = +5 pts
-- Support ticket handled professionally = +7 pts
-- Team ticket handled professionally & fast = +10 pts
-- Complaint ticket handled professionally = +4 pts
-(Pick the ONE best fit for the overall ticket type and handling quality)
-
-2. Responses (ID 21):
-- Official/formal response = +2 pts
-- Helpful and explanatory response = +3 pts
-- Trolling or unhelpful response = -4 pts
-(Pick the ONE best fit based on their replies)
-
-3. Ticket Level/Speed (ID 22):
-- Handled easy ticket in < 10 mins = +4 pts
-- Handled hard ticket in < 10 mins = +8 pts
-- Handled ticket (general) in < 30 mins = +2 pts
-- Handled any ticket > 1 hour = -4 pts
 You are a Minecraft server administrator evaluator. Your task is to evaluate the support provided in the following ticket transcript.
-The ticket was handled by: ${handlerUsername || 'Unknown'}.
+The ticket was handled by: ${handlerName || 'Unknown'}.
 
 Rules for points:
 - Responding within 2 minutes of the ticket opening: +1 point.
@@ -474,7 +450,7 @@ Transcript:
 ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 `;
 
-        const modelsToTry = ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-pro'];
+        const modelsToTry = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-pro-latest'];
         let responseText = null;
 
         for (const modelName of modelsToTry) {
