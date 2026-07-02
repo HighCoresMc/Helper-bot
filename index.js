@@ -449,7 +449,7 @@ Read the following transcript and calculate their points based ONLY on these rul
 - Handled any ticket > 1 hour = -4 pts
 (Pick the ONE best fit. Guess the speed/difficulty based on the conversation if timestamps aren't fully clear).
 
-Return ONLY a JSON object with this exact structure (do not use markdown formatting, just raw JSON):
+Return ONLY a JSON object with this exact structure:
 {
   "ticket_type_points": 0,
   "responses_points": 0,
