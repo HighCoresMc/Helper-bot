@@ -226,9 +226,10 @@ async function uploadTranscriptToGitHub() { }
 function downloadFile(url, filepath) {
     return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
+        const options = url.startsWith('https') ? { rejectUnauthorized: false } : {};
 
         const file = fs.createWriteStream(filepath);
-        protocol.get(url, (response) => {
+        protocol.get(url, options, (response) => {
             response.pipe(file);
             file.on('finish', () => {
                 file.close();
@@ -245,7 +246,8 @@ function downloadFile(url, filepath) {
 function fetchHtmlFromUrl(url) {
     return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
-        protocol.get(url, (res) => {
+        const options = url.startsWith('https') ? { rejectUnauthorized: false } : {};
+        protocol.get(url, options, (res) => {
             let data = '';
             res.on('data', (chunk) => {
                 data += chunk;
@@ -462,7 +464,7 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
         let responseText = null;
         const modelsToTry = [
             "gemini-2.5-flash",
-            "gemini-2.5-flash-lite",
+            "gemini-2.5-flash-8b",
             "gemini-1.5-flash"
         ];
 
@@ -473,7 +475,7 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
                 responseText = result.response.text();
                 break; // Success! Break out of the loop
             } catch (e) {
-                console.log(`⚠️ Failed with ${modelName}, trying next...`);
+                console.log(`⚠️ Failed with ${modelName}: ${e.message}`);
             }
         }
 
