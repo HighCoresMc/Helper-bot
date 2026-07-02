@@ -27,7 +27,7 @@ const GITHUB_FILE_PATH = 'tickets.js';
 
 // Discord Stats
 const DC_STATS_CHANNEL_ID = '1495819247685996844';
-const DC_STATS_MESSAGE_ID = process.env.DC_STATS_MESSAGE_ID || 'your_dc_status_msg_id';
+const DC_STATS_MESSAGE_ID = process.env.DC_STATS_MESSAGE_ID || '1508162784339165376';
 
 // Transcripts Folder
 if (!fs.existsSync(TRANSCRIPTS_FOLDER)) {
@@ -465,10 +465,10 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 
         let responseText = null;
         const modelsToTry = [
-        'gemini-1.5-flash',
-        'gemini-1.5-pro',
-        'gemini-1.0-pro'
-    ];
+            'gemini-1.5-flash',
+            'gemini-1.5-pro',
+            'gemini-1.0-pro'
+        ];
 
         for (const modelName of modelsToTry) {
             try {
@@ -697,10 +697,10 @@ async function saveTicketToSupabase(ticketData) {
             try {
                 const actionVerb = ptsToAward > 0 ? 'added' : (ptsToAward < 0 ? 'deducted' : 'added');
                 const preposition = ptsToAward > 0 ? 'to' : (ptsToAward < 0 ? 'from' : 'to');
-                
+
                 // Log 1: For 'Recent Activities' (Points category, System as user)
                 const logRecent = JSON.stringify({
-                    action_type: 'Update Points', 
+                    action_type: 'Update Points',
                     details: `Successfully ${actionVerb} ${Math.abs(ptsToAward)} points ${preposition} ${empName}. Reason: Ticket ${ticketData.ticketName} Evaluation`,
                     category: 'Points',
                     user_name: 'System',
@@ -708,7 +708,7 @@ async function saveTicketToSupabase(ticketData) {
                 });
 
                 const actionVerbFull = ptsToAward > 0 ? 'Awarded' : (ptsToAward < 0 ? 'Deducted' : 'Awarded');
-                
+
                 // Log 2: For 'Activity Logs' full table (Tickets category, System as user, detailed breakdown)
                 const logFull = JSON.stringify({
                     action_type: 'Closed Ticket',
@@ -719,7 +719,7 @@ async function saveTicketToSupabase(ticketData) {
                 });
 
                 const logUrl = new URL(SUPABASE_URL + '/rest/v1/activity_log');
-                
+
                 const sendLog = (payloadStr) => new Promise((resolveLog) => {
                     const options = {
                         hostname: logUrl.hostname,
@@ -733,7 +733,7 @@ async function saveTicketToSupabase(ticketData) {
                         }
                     };
                     const reqLog = https.request(options, res => {
-                        res.on('data', () => {});
+                        res.on('data', () => { });
                         res.on('end', resolveLog);
                     });
                     reqLog.on('error', resolveLog);
@@ -877,7 +877,7 @@ async function fetchMCStatus() {
         // Direct MC Server API Query
         await new Promise((resolveApi) => {
             let apiTarget = MC_SERVER_IP;
-            const options = { 
+            const options = {
                 rejectUnauthorized: false,
                 headers: { 'User-Agent': 'HighCoreMC-Discord-Bot/1.0' }
             };
@@ -1417,6 +1417,9 @@ client.on('messageCreate', async (message) => {
                 if (handlerUsername.length === 0) handlerUsername = null;
                 else handlerUsername = handlerUsername.join(', ');
             }
+
+            const responseTime = formatResponseTime(openedAt);
+
             if (handlerUsername) console.log(`🔍 Handler from transcript: "${handlerUsername}"`);
             else console.log(`🔍 Handler from transcript: Not found`);
             if (openedAt) console.log(`⏰ Opened at (UTC): ${openedAt}, response time: ${responseTime}`);
