@@ -17,6 +17,7 @@ const TICKET_CATEGORY_ID = '1487143174567628840';
 const MC_STATUS_CHANNEL_ID = process.env.MC_STATUS_CHANNEL_ID || '1487139736748425236';
 const MC_STATUS_MESSAGE_ID = process.env.MC_STATUS_MESSAGE_ID || '1508162784339165376';
 const MC_LOGS_CHANNEL_ID = process.env.MC_LOGS_CHANNEL_ID || '1487148944667578368';
+const MC_SERVER_IP = process.env.MC_SERVER_IP || '198.186.130.122:25577';
 
 // GitHub
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
@@ -872,6 +873,34 @@ async function fetchMCStatus() {
             }
         }
 
+        // Direct MC Server API Query — primary source (fixes Components V2 embed unreadability)
+        await new Promise((resolveApi) => {
+            https.get(`https://api.mcsrvstat.us/3/${MC_SERVER_IP}`, { rejectUnauthorized: false }, (res) => {
+                let raw = '';
+                res.on('data', c => raw += c);
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(raw);
+                        if (json.online) {
+                            mcData.serverStatus = 'Online';
+                            mcData.playersOnline = String(json.players?.online ?? 0);
+                            mcData.maxPlayers = String(json.players?.max ?? 100);
+                            if (json.debug?.ping != null) mcData.serverPing = json.debug.ping + 'ms';
+                        } else {
+                            mcData.serverStatus = 'Offline';
+                        }
+                        console.log(`🌐 MC API: ${mcData.serverStatus} | Players: ${mcData.playersOnline}/${mcData.maxPlayers} | Ping: ${mcData.serverPing}`);
+                    } catch (e) {
+                        console.log('⚠️ MC API parse error:', e.message);
+                    }
+                    resolveApi();
+                });
+            }).on('error', (e) => {
+                console.log('⚠️ MC API fetch error:', e.message);
+                resolveApi();
+            });
+        });
+
         // Status Embed
         try {
             let statusChannel = client.channels.cache.get(MC_STATUS_CHANNEL_ID);
@@ -882,7 +911,7 @@ async function fetchMCStatus() {
 
             if (statusChannel) {
                 const message = await statusChannel.messages.fetch(MC_STATUS_MESSAGE_ID);
-                console.log('📨 Embed found, fields:', message.embeds[0]?.fields?.length || 0);
+                console.log('📨 Embed found, fields:', message.embeds[0]?.fields?.length || 0, '| desc preview:', message.embeds[0]?.description?.substring(0, 120)?.replace(/\n/g, ' ') || 'none');
 
                 if (message && message.embeds && message.embeds.length > 0) {
                     const embed = message.embeds[0];
@@ -890,23 +919,42 @@ async function fetchMCStatus() {
                     if (embed.description) {
                         const desc = embed.description;
 
-                        const pingMatch = desc.match(/Server Ping[^\d]*(\d+)/i);
+                        // Status detection from description text/emoji
+                        if (desc.includes('🟢') || /open|players can join/i.test(desc)) {
+                            mcData.serverStatus = 'Online';
+                        }
+                        if (desc.includes('🔴') || /server is offline|server is down/i.test(desc)) {
+                            mcData.serverStatus = 'Offline';
+                        }
+
+                        const pingMatch = desc.match(/(?:Server\s+)?Ping[^\d]*(\d+)/i);
                         if (pingMatch) mcData.serverPing = pingMatch[1] + 'ms';
 
                         const healthMatch = desc.match(/Health[^\d]*([\d.]+)/i);
                         if (healthMatch) mcData.health = healthMatch[1] + '%';
 
-                        const peakMatch = desc.match(/Peak Players[^\d]*(\d+)/i);
+                        const peakMatch = desc.match(/Peak\s+Players[^\d]*(\d+)/i);
                         if (peakMatch) mcData.peakPlayers = peakMatch[1];
 
-                        const loginsMatch = desc.match(/Total Logins[^\d]*(\d+)/i);
+                        const loginsMatch = desc.match(/Total\s+Logins[^\d]*(\d+)/i);
                         if (loginsMatch) mcData.totalLogins = loginsMatch[1];
 
                         const availMatch = desc.match(/Availability[^\d]*([\d.]+)/i);
                         if (availMatch) mcData.availability = availMatch[1] + '%';
 
-                        const ipMatch = desc.match(/Server IP[^\d]*([\d.:]+)/i);
+                        const ipMatch = desc.match(/(?:Java\s+)?IP[^\d]*([\d.:]+)/i);
                         if (ipMatch) mcData.serverIP = ipMatch[1];
+
+                        // Players from description
+                        const playersDesc = desc.match(/Players\s+Online[^\d]*(\d+)\s*[\/|]\s*(\d+)/i);
+                        if (playersDesc) {
+                            mcData.playersOnline = playersDesc[1];
+                            mcData.maxPlayers = playersDesc[2];
+                        }
+
+                        // Uptime from description
+                        const uptimeDesc = desc.match(/Uptime[:\s]*(\d+h\s*\d+m(?:\s*\d+s)?|\d+m(?:\s*\d+s)?)/i);
+                        if (uptimeDesc) mcData.uptime = uptimeDesc[1].trim();
                     }
 
                     if (embed.fields && embed.fields.length > 0) {
