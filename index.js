@@ -1331,16 +1331,18 @@ client.on('messageCreate', async (message) => {
         }
 
         if (message.embeds && message.embeds.length > 0) {
-            const embed = message.embeds[0];
-            fullText += '\n' + (embed.title || '') + '\n' + (embed.description || '');
-            if (embed.url) {
-                transcriptUrl = transcriptUrl || embed.url;
-            }
-            if (embed.fields) {
-                embed.fields.forEach(f => {
-                    fullText += '\n' + (f.name || '') + '\n' + (f.value || '');
-                });
-            }
+            message.embeds.forEach(embed => {
+                fullText += '\n' + (embed.title || '') + '\n' + (embed.description || '');
+                if (embed.url) transcriptUrl = transcriptUrl || embed.url;
+                if (embed.fields) {
+                    embed.fields.forEach(f => {
+                        fullText += '\n' + (f.name || '') + '\n' + (f.value || '');
+                    });
+                }
+                try {
+                    fullText += '\n' + JSON.stringify(embed.toJSON ? embed.toJSON() : embed);
+                } catch (e) {}
+            });
         }
 
         let attachmentUrl = null;
@@ -1357,7 +1359,7 @@ client.on('messageCreate', async (message) => {
         }
 
         if (!transcriptUrl) {
-            const urlMatch = fullText.match(/https?:\/\/[^\s)\]]+/);
+            const urlMatch = fullText.match(/https?:\/\/[^\s)\]"'>]+/);
             if (urlMatch) {
                 transcriptUrl = urlMatch[0];
             }
