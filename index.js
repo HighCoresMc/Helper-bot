@@ -1452,7 +1452,8 @@ client.on('messageCreate', async (message) => {
                     if (handlerIdMatch) {
                         let hId = handlerIdMatch[1];
                         try {
-                            const member = message.guild.members.cache.get(hId);
+                            let member = message.guild.members.cache.get(hId);
+                            if (!member) member = await message.guild.members.fetch(hId).catch(() => null);
                             if (member) handlerUsername = member.user.username;
                             else handlerUsername = hId;
                         } catch(e) {}
@@ -1478,7 +1479,8 @@ client.on('messageCreate', async (message) => {
                     
                     if (hId) {
                         try {
-                            const member = message.guild.members.cache.get(hId);
+                            let member = message.guild.members.cache.get(hId);
+                            if (!member) member = await message.guild.members.fetch(hId).catch(() => null);
                             if (member) handlerUsername = member.user.username;
                             else handlerUsername = hId; // fallback
                         } catch(e) {}
