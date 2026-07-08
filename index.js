@@ -1322,9 +1322,7 @@ client.on('messageCreate', async (message) => {
             for (const row of message.components) {
                 if (row.components) {
                     for (const comp of row.components) {
-                        if (comp.url) {
-                            transcriptUrl = comp.url;
-                        }
+                        if (comp.url) transcriptUrl = transcriptUrl || comp.url;
                     }
                 }
             }
@@ -1348,9 +1346,7 @@ client.on('messageCreate', async (message) => {
         let attachmentUrl = null;
         let cleanFileName = null;
         if (message.attachments && message.attachments.size > 0) {
-            const htmlAttachment = message.attachments.find(att =>
-                att.name && att.name.endsWith('.html')
-            );
+            const htmlAttachment = message.attachments.find(att => att.name && att.name.endsWith('.html'));
             if (htmlAttachment) {
                 attachmentUrl = htmlAttachment.url;
                 cleanFileName = htmlAttachment.name.replace(/[^a-zA-Z0-9.-]/g, '_');
@@ -1359,9 +1355,26 @@ client.on('messageCreate', async (message) => {
         }
 
         if (!transcriptUrl) {
-            const urlMatch = fullText.match(/https?:\/\/[^\s)\]"'>]+/);
-            if (urlMatch) {
-                transcriptUrl = urlMatch[0];
+            // Check raw message to support JDA Container/UI V2 Components
+            try {
+                const rawMsg = await client.rest.get(`/channels/${message.channelId}/messages/${message.id}`);
+                const rawStr = JSON.stringify(rawMsg);
+                // Look for a link that has 'transcript' in it
+                const transcriptMatch = rawStr.match(/https?:\/\/[^\s)\]"'>]*transcript[^\s)\]"'>]*/i);
+                if (transcriptMatch) {
+                    transcriptUrl = transcriptMatch[0];
+                } else {
+                    // Fallback to any URL that is not imgur/discord
+                    const matches = rawStr.match(/https?:\/\/[^\s)\]"'>]+/g);
+                    if (matches) {
+                        const validUrl = matches.find(u => !u.includes('imgur.com') && !u.includes('discord.com') && !u.includes('discordapp.com'));
+                        if (validUrl) transcriptUrl = validUrl;
+                    }
+                }
+            } catch (e) {
+                console.error("Error fetching raw message:", e.message);
+                const urlMatch = fullText.match(/https?:\/\/[^\s)\]"'>]+/);
+                if (urlMatch) transcriptUrl = urlMatch[0];
             }
         }
 
