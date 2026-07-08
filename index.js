@@ -1445,6 +1445,19 @@ client.on('messageCreate', async (message) => {
             // Fallback to extracting from messages
             if (!handlerUsername && transcriptContent) {
                 handlerUsername = extractHandlerFromTranscript(transcriptContent, openedByUsername);
+                
+                // NEW: Extract from TranscriptService HTML directly
+                if (!handlerUsername) {
+                    const handlerIdMatch = transcriptContent.match(/id=['"]ticket-handler-id['"]>(\d+)<\/div>/i);
+                    if (handlerIdMatch) {
+                        let hId = handlerIdMatch[1];
+                        try {
+                            const member = message.guild.members.cache.get(hId);
+                            if (member) handlerUsername = member.user.username;
+                            else handlerUsername = hId;
+                        } catch(e) {}
+                    }
+                }
             }
             
             // Extract from Embed/JDA Container V2 (Closed By / Claimed By)
