@@ -1462,24 +1462,36 @@ client.on('messageCreate', async (message) => {
             
             // Extract from Embed/JDA Container V2 (Closed By / Claimed By)
             if (!handlerUsername) {
-                let handlerId = null;
-                const closedByMatch = rawStr.match(/Closed By:\*\*[^\d<]*<@!?(\d+)>/i) || fullText.match(/Closed By:\*\*[^\d<]*<@!?(\d+)>/i);
+                let extractedText = null;
+                const closedByMatch = rawStr.match(/Closed By:\*\*\s*(.+?)(?:\\n|\n|$)/i) || fullText.match(/Closed By:\*\*\s*(.+?)(?:\\n|\n|$)/i);
                 if (closedByMatch) {
-                    handlerId = closedByMatch[1];
+                    extractedText = closedByMatch[1].trim();
                 } else {
-                    const claimedByMatch = rawStr.match(/Claimed By:\*\*[^\d<]*<@!?(\d+)>/i) || fullText.match(/Claimed By:\*\*[^\d<]*<@!?(\d+)>/i);
-                    if (claimedByMatch) handlerId = claimedByMatch[1];
+                    const claimedByMatch = rawStr.match(/Claimed By:\*\*\s*(.+?)(?:\\n|\n|$)/i) || fullText.match(/Claimed By:\*\*\s*(.+?)(?:\\n|\n|$)/i);
+                    if (claimedByMatch) extractedText = claimedByMatch[1].trim();
                 }
                 
-                if (handlerId) {
-                    try {
-                        const member = message.guild.members.cache.get(handlerId);
+                if (extractedText && extractedText !== 'None') {
+                    // It might be a mention <@12345> or <@!12345>
+                    const mentionMatch = extractedText.match(/<@!?(\d+)>/);
+                    let hId = mentionMatch ? mentionMatch[1] : null;
+                    
+                    if (hId) {
+                        try {
+                            const member = message.guild.members.cache.get(hId);
+                            if (member) handlerUsername = member.user.username;
+                            else handlerUsername = hId; // fallback
+                        } catch(e) {}
+                    } else {
+                        // It's a plain name like 'Opexy'
+                        handlerUsername = extractedText;
+                        
+                        // Try to resolve name to ID for accuracy if needed
+                        const member = message.guild.members.cache.find(m => m.user.username.toLowerCase() === extractedText.toLowerCase() || m.displayName.toLowerCase() === extractedText.toLowerCase());
                         if (member) {
                             handlerUsername = member.user.username;
-                        } else {
-                            handlerUsername = handlerId; // fallback to ID if not cached
                         }
-                    } catch(e) {}
+                    }
                 }
             }
 
