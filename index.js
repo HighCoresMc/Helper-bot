@@ -1354,11 +1354,12 @@ client.on('messageCreate', async (message) => {
             }
         }
 
+        let rawStr = '';
         if (!transcriptUrl) {
             // Check raw message to support JDA Container/UI V2 Components
             try {
                 const rawMsg = await client.rest.get(`/channels/${message.channelId}/messages/${message.id}`);
-                const rawStr = JSON.stringify(rawMsg);
+                rawStr = JSON.stringify(rawMsg);
                 // Look for a link that has 'transcript' in it
                 const transcriptMatch = rawStr.match(/https?:\/\/[^\s)\]"'>]*transcript[^\s)\]"'>]*/i);
                 if (transcriptMatch) {
@@ -1376,6 +1377,12 @@ client.on('messageCreate', async (message) => {
                 const urlMatch = fullText.match(/https?:\/\/[^\s)\]"'>]+/);
                 if (urlMatch) transcriptUrl = urlMatch[0];
             }
+        } else {
+            // Even if transcriptUrl was found in embeds, we still want rawStr for handler extraction
+            try {
+                const rawMsg = await client.rest.get(`/channels/${message.channelId}/messages/${message.id}`);
+                rawStr = JSON.stringify(rawMsg);
+            } catch(e) {}
         }
 
         if (transcriptUrl || attachmentUrl) {
@@ -1439,6 +1446,30 @@ client.on('messageCreate', async (message) => {
             if (!handlerUsername && transcriptContent) {
                 handlerUsername = extractHandlerFromTranscript(transcriptContent, openedByUsername);
             }
+            
+            // Extract from Embed/JDA Container V2 (Closed By / Claimed By)
+            if (!handlerUsername) {
+                let handlerId = null;
+                const closedByMatch = rawStr.match(/Closed By:\*\*[^\d<]*<@!?(\d+)>/i) || fullText.match(/Closed By:\*\*[^\d<]*<@!?(\d+)>/i);
+                if (closedByMatch) {
+                    handlerId = closedByMatch[1];
+                } else {
+                    const claimedByMatch = rawStr.match(/Claimed By:\*\*[^\d<]*<@!?(\d+)>/i) || fullText.match(/Claimed By:\*\*[^\d<]*<@!?(\d+)>/i);
+                    if (claimedByMatch) handlerId = claimedByMatch[1];
+                }
+                
+                if (handlerId) {
+                    try {
+                        const member = message.guild.members.cache.get(handlerId);
+                        if (member) {
+                            handlerUsername = member.user.username;
+                        } else {
+                            handlerUsername = handlerId; // fallback to ID if not cached
+                        }
+                    } catch(e) {}
+                }
+            }
+
             if (handlerUsername && Array.isArray(handlerUsername)) {
                 if (handlerUsername.length === 0) handlerUsername = null;
                 else handlerUsername = handlerUsername.join(', ');
