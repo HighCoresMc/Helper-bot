@@ -1443,11 +1443,11 @@ client.on('messageCreate', async (message) => {
             }
 
             // Fallback to extracting from messages
-            if (!handlerUsername && transcriptContent) {
+            if ((!handlerUsername || (Array.isArray(handlerUsername) && handlerUsername.length === 0)) && transcriptContent) {
                 handlerUsername = extractHandlerFromTranscript(transcriptContent, openedByUsername);
                 
                 // NEW: Extract from TranscriptService HTML directly
-                if (!handlerUsername) {
+                if (!handlerUsername || (Array.isArray(handlerUsername) && handlerUsername.length === 0)) {
                     const handlerIdMatch = transcriptContent.match(/id=['"]ticket-handler-id['"]>(\d+)<\/div>/i);
                     if (handlerIdMatch) {
                         let hId = handlerIdMatch[1];
@@ -1462,7 +1462,7 @@ client.on('messageCreate', async (message) => {
             }
             
             // Extract from Embed/JDA Container V2 (Closed By / Claimed By)
-            if (!handlerUsername) {
+            if (!handlerUsername || (Array.isArray(handlerUsername) && handlerUsername.length === 0)) {
                 let extractedText = null;
                 const closedByMatch = rawStr.match(/Closed By:\*\*\s*(.+?)(?:\\n|\n|$)/i) || fullText.match(/Closed By:\*\*\s*(.+?)(?:\\n|\n|$)/i);
                 if (closedByMatch) {
