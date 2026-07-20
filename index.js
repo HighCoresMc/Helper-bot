@@ -1,8 +1,8 @@
 const { Client, GatewayIntentBits, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
 const fs = require('fs');
 const path = require('path');
-const https = require('https');
-const http = require('http');
+const https = require('HTTPS');
+const http = require('HTTP');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
@@ -226,8 +226,8 @@ async function uploadTranscriptToGitHub() { }
 // Helpers — Download File
 function downloadFile(url, filepath) {
     return new Promise((resolve, reject) => {
-        const protocol = url.startsWith('https') ? https : http;
-        const options = url.startsWith('https') ? { rejectUnauthorized: false } : {};
+        const protocol = url.startsWith('HTTPS') ? https : http;
+        const options = url.startsWith('HTTPS') ? { rejectUnauthorized: false } : {};
 
         const file = fs.createWriteStream(filepath);
         protocol.get(url, options, (response) => {
@@ -246,8 +246,8 @@ function downloadFile(url, filepath) {
 // Helpers — Fetch HTML
 function fetchHtmlFromUrl(url) {
     return new Promise((resolve, reject) => {
-        const protocol = url.startsWith('https') ? https : http;
-        const options = url.startsWith('https') ? { rejectUnauthorized: false } : {};
+        const protocol = url.startsWith('HTTPS') ? https : http;
+        const options = url.startsWith('HTTPS') ? { rejectUnauthorized: false } : {};
         protocol.get(url, options, (res) => {
             let data = '';
             res.on('data', (chunk) => {
@@ -285,15 +285,15 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
 
     // Try extracting by data-user-id first (more accurate)
     const idRegex = /data-user-id=['"](\d{17,19})['"][^>]*>([^<]+)</g;
-    let m;
-    while ((m = idRegex.exec(transcriptContent)) !== null) {
-        const id = m[1];
-        const name = m[2].trim();
+    let M;
+    while ((M = idRegex.exec(transcriptContent)) !== null) {
+        const id = M[1];
+        const name = M[2].trim();
 
         if (seenIds.has(id)) continue;
         seenIds.add(id);
 
-        if (botNames.some(b => name.toLowerCase().includes(b))) continue;
+        if (botNames.some(B => name.toLowerCase().includes(B))) continue;
         if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
 
         handlers.push(id); // Prefer returning ID directly
@@ -303,11 +303,11 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
     const seenNames = new Set();
     const nameHandlers = [];
     const nameRegex = /class=['"](?:author|uname)['"][^>]*>([^<]+)</g; // Added author for new transcript format
-    while ((m = nameRegex.exec(transcriptContent)) !== null) {
-        const name = m[1].trim();
+    while ((M = nameRegex.exec(transcriptContent)) !== null) {
+        const name = M[1].trim();
         if (seenNames.has(name)) continue;
         seenNames.add(name);
-        if (botNames.some(b => name.toLowerCase().includes(b))) continue;
+        if (botNames.some(B => name.toLowerCase().includes(B))) continue;
         if (ticketOwnerUsername && name.toLowerCase() === ticketOwnerUsername.toLowerCase()) continue;
         nameHandlers.push(name);
     }
@@ -318,9 +318,9 @@ function extractHandlerFromTranscript(transcriptContent, ticketOwnerUsername) {
 
 // Helpers — Extract Opened At From Transcript
 function extractTicketOpenedAt(transcriptContent) {
-    const m = transcriptContent.match(/Opened At<\/div>\s*<div[^>]*>([^<]+)</);
-    if (!m) return null;
-    const raw = m[1].trim().replace('\u00b7', '').replace(/\s+/g, ' ').trim();
+    const M = transcriptContent.match(/Opened At<\/div>\s*<div[^>]*>([^<]+)</);
+    if (!M) return null;
+    const raw = M[1].trim().replace('\u00b7', '').replace(/\s+/g, ' ').trim();
     const parsed = new Date(raw);
     if (isNaN(parsed.getTime())) return null;
     return new Date(parsed.getTime() - 3 * 60 * 60 * 1000).toISOString();
@@ -329,9 +329,9 @@ function extractTicketOpenedAt(transcriptContent) {
 // Helpers — Extract Ticket Type From Transcript
 function extractTicketType(transcriptContent) {
     if (!transcriptContent) return null;
-    const m = transcriptContent.match(/Type<\/div>\s*<div[^>]*>(?:<[^>]+>)*([^<]+)</i);
-    if (m && m[1]) {
-        const type = m[1].trim().toUpperCase();
+    const M = transcriptContent.match(/Type<\/div>\s*<div[^>]*>(?:<[^>]+>)*([^<]+)</i);
+    if (M && M[1]) {
+        const type = M[1].trim().toUpperCase();
         // Ignore if it accidentally matched something super long or weird
         if (type.length > 1 && type.length < 20) return type;
     }
@@ -340,8 +340,8 @@ function extractTicketType(transcriptContent) {
 
 // Helpers — Extract Opened By Username From Transcript
 function extractOpenedByUsername(transcriptContent) {
-    const m = transcriptContent.match(/Opened By<\/div>\s*<div[^>]*>([^<]+)</);
-    return m ? m[1].trim() : null;
+    const M = transcriptContent.match(/Opened By<\/div>\s*<div[^>]*>([^<]+)</);
+    return M ? M[1].trim() : null;
 }
 
 // Helpers — Format Response Time
@@ -362,14 +362,14 @@ async function resolveDisplayNameToDiscordId(displayName) {
         const guild = client.guilds.cache.get(GUILD_ID);
         if (!guild) return null;
         const clean = displayName.replace(/^@/, '').trim().toLowerCase();
-        const member = guild.members.cache.find(m =>
-            m.displayName.toLowerCase() === clean ||
-            m.user.username.toLowerCase() === clean ||
-            m.displayName.toLowerCase().includes(clean) ||
-            clean.includes(m.displayName.toLowerCase())
+        const member = guild.members.cache.find(M =>
+            M.displayName.toLowerCase() === clean ||
+            M.user.username.toLowerCase() === clean ||
+            M.displayName.toLowerCase().includes(clean) ||
+            clean.includes(M.displayName.toLowerCase())
         );
         return member ? member.id : null;
-    } catch (e) {
+    } catch (E) {
         return null;
     }
 }
@@ -390,8 +390,8 @@ async function lookupEmployee(identifier) {
         };
         const req = https.request(options, res => {
             let body = '';
-            res.on('data', c => body += c);
-            res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { resolve([]); } });
+            res.on('data', C => body += C);
+            res.on('end', () => { try { resolve(JSON.parse(body)); } catch (E) { resolve([]); } });
         });
         req.on('error', () => resolve([]));
         req.end();
@@ -769,7 +769,7 @@ async function saveTicketToSupabase(ticketData) {
                     path: insertUrl.pathname + insertUrl.search,
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
+                        'Content-Type': 'application/JSON',
                         'apikey': SUPABASE_KEY,
                         'Authorization': 'Bearer ' + SUPABASE_KEY,
                         'Prefer': 'return=minimal, resolution=merge-duplicates',
@@ -778,10 +778,10 @@ async function saveTicketToSupabase(ticketData) {
                 };
                 const req = https.request(options, res => {
                     let body = '';
-                    res.on('data', c => body += c);
+                    res.on('data', C => body += C);
                     res.on('end', () => resolve({ status: res.statusCode, body }));
                 });
-                req.on('error', (e) => { console.error('❌ Supabase INSERT network error:', e.message); resolve({ status: 0, body: '' }); });
+                req.on('error', (E) => { console.error('❌ Supabase INSERT network error:', E.message); resolve({ status: 0, body: '' }); });
                 req.write(payloadStr);
                 req.end();
             });
@@ -817,7 +817,7 @@ async function saveTicketToSupabase(ticketData) {
 client.once('ready', () => {
     console.log('🤖 Bot is online!');
     client.user.setPresence({ 
-        activities: [{ name: 'HighCoreMC | Support', type: 3 }], 
+        activities: [{ name: 'HighCoreMC | Helper', type: 3 }], 
         status: 'idle' 
     });
     console.log(`📝 Bot name: ${client.user.tag}`);
@@ -830,7 +830,7 @@ client.once('ready', () => {
         guild.members.fetch().then(() => {
             console.log('✅ Members cached:', guild.members.cache.size);
             updateOnlineAdmins();
-        }).catch(e => console.error('fetch members error:', e.message));
+        }).catch(E => console.error('fetch members error:', E.message));
     }
     setInterval(updateOnlineAdmins, 60 * 1000);
 
