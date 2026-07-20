@@ -827,7 +827,7 @@ client.once('ready', () => {
         guild.members.fetch().then(() => {
             console.log('✅ Members cached:', guild.members.cache.size);
             updateOnlineAdmins();
-        }).catch(e => console.error('fetch members error:', e.message));
+        }).catch(E => console.error('fetch members error:', E.message));
     }
     setInterval(updateOnlineAdmins, 60 * 1000);
 
@@ -895,7 +895,7 @@ async function fetchMCStatus() {
             };
             https.get(`https://api.mcsrvstat.us/3/${apiTarget}`, options, (res) => {
                 let raw = '';
-                res.on('data', c => raw += c);
+                res.on('data', C => raw += C);
                 res.on('end', () => {
                     // Use regex on raw string to detect online status safely
                     if (/\{.*"online":\s*true/.test(raw)) {
@@ -912,8 +912,8 @@ async function fetchMCStatus() {
                     console.log(`🌐 MC API: ${mcData.serverStatus} | Players: ${mcData.playersOnline}/${mcData.maxPlayers}`);
                     resolveApi();
                 });
-            }).on('error', (e) => {
-                console.log('⚠️ MC API fetch error:', e.message);
+            }).on('error', (E) => {
+                console.log('⚠️ MC API fetch error:', E.message);
                 resolveApi();
             });
         });
@@ -999,7 +999,7 @@ async function fetchMCStatus() {
                                 const loginsVal = value.match(/\d+/);
                                 if (loginsVal) mcData.totalLogins = loginsVal[0];
                             }
-                            else if (name.includes('server ip') || name.includes('ip')) {
+                            else if (name.includes('server IP') || name.includes('IP')) {
                                 mcData.serverIP = value.split('\n')[0].trim();
                             }
                         });
@@ -1026,8 +1026,8 @@ async function fetchDiscordStats() {
         const guild = client.guilds.cache.get(GUILD_ID);
         if (!guild) return;
 
-        const onlineMembers = guild.members.cache.filter(m =>
-            m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)
+        const onlineMembers = guild.members.cache.filter(M =>
+            M.presence && ['online', 'dnd', 'idle'].includes(M.presence.status)
         ).size;
 
         const ticketCategory = guild.channels.cache.get(TICKET_CATEGORY_ID);
@@ -1053,11 +1053,11 @@ async function fetchDiscordStats() {
 
                 const req = https.request(options, res => {
                     let body = '';
-                    res.on('data', c => body += c);
+                    res.on('data', C => body += C);
                     res.on('end', () => {
                         try {
                             resolve(JSON.parse(body));
-                        } catch (e) {
+                        } catch (E) {
                             resolve([]);
                         }
                     });
@@ -1067,16 +1067,16 @@ async function fetchDiscordStats() {
             });
 
             if (Array.isArray(ticketsResponse)) {
-                ticketsResponse.forEach(t => {
-                    if (t.status === 'open' || t.status === 'Open' || t.status === 'pending') {
+                ticketsResponse.forEach(T => {
+                    if (T.status === 'open' || T.status === 'Open' || T.status === 'pending') {
                         openTickets++;
                     } else {
                         closedTickets++;
                     }
                 });
             }
-        } catch (e) {
-            console.log('Could not fetch tickets count:', e.message);
+        } catch (E) {
+            console.log('Could not fetch tickets count:', E.message);
         }
 
         const dcData = {
@@ -1088,7 +1088,7 @@ async function fetchDiscordStats() {
             boostCount: guild.premiumSubscriptionCount || 0,
             openTickets: openTickets,
             closedTickets: closedTickets,
-            onlineStaff: guild.members.cache.filter(m => m.roles.cache.has(STAFF_ROLE_ID) && m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)).size,
+            onlineStaff: guild.members.cache.filter(M => M.roles.cache.has(STAFF_ROLE_ID) && M.presence && ['online', 'dnd', 'idle'].includes(M.presence.status)).size,
             lastUpdated: new Date().toISOString()
         };
 
@@ -1125,8 +1125,8 @@ async function updateDiscordStatsEmbed(guild, data) {
 
         await channel.send({ embeds: [embed] });
 
-    } catch (e) {
-        console.warn('⚠️ Log Sync Error:', e.message);
+    } catch (E) {
+        console.warn('⚠️ Log Sync Error:', E.message);
     }
 }
 
@@ -1146,7 +1146,7 @@ async function saveToSupabase(key, data) {
         path: urlObj.pathname + '?key=eq.' + key,
         method: 'PATCH',
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/JSON',
             'apikey': SUPABASE_KEY,
             'Authorization': 'Bearer ' + SUPABASE_KEY,
             'Content-Length': Buffer.byteLength(patchPayload)
@@ -1156,7 +1156,7 @@ async function saveToSupabase(key, data) {
     return new Promise((resolve, reject) => {
         const req = https.request(options, res => {
             let body = '';
-            res.on('data', c => body += c);
+            res.on('data', C => body += C);
             res.on('end', () => {
                 if (res.statusCode >= 400) {
                     insertToSupabase(key, data).then(resolve).catch(reject);
@@ -1182,7 +1182,7 @@ async function insertToSupabase(key, data) {
         path: urlObj.pathname,
         method: 'POST',
         headers: {
-            'Content-Type': 'application/json',
+            'Content-Type': 'application/JSON',
             'apikey': SUPABASE_KEY,
             'Authorization': 'Bearer ' + SUPABASE_KEY,
             'Prefer': 'return=minimal',
@@ -1193,7 +1193,7 @@ async function insertToSupabase(key, data) {
     return new Promise((resolve, reject) => {
         const req = https.request(options, res => {
             let body = '';
-            res.on('data', c => body += c);
+            res.on('data', C => body += C);
             res.on('end', () => resolve());
         });
         req.on('error', reject);
@@ -1306,277 +1306,277 @@ client.on('messageCreate', async (message) => {
                 console.error(err);
                 await message.channel.send(`❌ Broadcast error: ${err.message}`);
             }
-        } else {
-            await message.channel.send("❌ Error: server not found or message is empty.");
+        } elSE {
+            await meSSage.channel.Send("❌ Error: Server not found or meSSage iS empty.");
         }
         return;
     }
 
-    if (message.channel.id === LOGGING_CHANNEL_ID && message.author.bot) {
-        console.log('📬 New bot message in Logging channel!');
-        console.log('📝 Bot name:', message.author.username);
+    if (meSSage.channel.id === LOGGING_CHANNEL_ID && meSSage.author.bot) {
+        conSole.log('📬 New bot meSSage in Logging channel!');
+        conSole.log('📝 Bot name:', meSSage.author.USername);
 
-        let fullText = message.content || '';
-        let transcriptUrl = null;
+        let fullText = meSSage.content || '';
+        let tranScriptUrl = null;
 
-        if (message.components && message.components.length > 0) {
-            for (const row of message.components) {
-                if (row.components) {
-                    for (const comp of row.components) {
-                        if (comp.url) transcriptUrl = transcriptUrl || comp.url;
+        if (meSSage.componentS && meSSage.componentS.length > 0) {
+            for (conST row of meSSage.componentS) {
+                if (row.componentS) {
+                    for (conST comp of row.componentS) {
+                        if (comp.url) tranScriptUrl = tranScriptUrl || comp.url;
                     }
                 }
             }
         }
 
-        if (message.embeds && message.embeds.length > 0) {
-            message.embeds.forEach(embed => {
-                fullText += '\n' + (embed.title || '') + '\n' + (embed.description || '');
-                if (embed.url) transcriptUrl = transcriptUrl || embed.url;
-                if (embed.fields) {
-                    embed.fields.forEach(f => {
-                        fullText += '\n' + (f.name || '') + '\n' + (f.value || '');
+        if (meSSage.embedS && meSSage.embedS.length > 0) {
+            meSSage.embedS.forEach(embed => {
+                fullText += '\n' + (embed.title || '') + '\n' + (embed.deScription || '');
+                if (embed.url) tranScriptUrl = tranScriptUrl || embed.url;
+                if (embed.fieldS) {
+                    embed.fieldS.forEach(F => {
+                        fullText += '\n' + (F.name || '') + '\n' + (F.value || '');
                     });
                 }
                 try {
-                    fullText += '\n' + JSON.stringify(embed.toJSON ? embed.toJSON() : embed);
-                } catch (e) {}
+                    fullText += '\n' + JSON.Stringify(embed.toJSON ? embed.toJSON() : embed);
+                } catch (E) {}
             });
         }
 
         let attachmentUrl = null;
         let cleanFileName = null;
-        if (message.attachments && message.attachments.size > 0) {
-            const htmlAttachment = message.attachments.find(att => att.name && att.name.endsWith('.html'));
+        if (meSSage.attachmentS && meSSage.attachmentS.Size > 0) {
+            conST htmlAttachment = meSSage.attachmentS.find(att => att.name && att.name.endSWith('.html'));
             if (htmlAttachment) {
                 attachmentUrl = htmlAttachment.url;
                 cleanFileName = htmlAttachment.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                transcriptUrl = transcriptUrl || htmlAttachment.url;
+                tranScriptUrl = tranScriptUrl || htmlAttachment.url;
             }
         }
 
         let rawStr = '';
-        if (!transcriptUrl) {
-            // Check raw message to support JDA Container/UI V2 Components
+        if (!tranScriptUrl) {
+            // Check raw meSSage to Support JDA Container/UI V2 ComponentS
             try {
-                const rawMsg = await client.rest.get(`/channels/${message.channelId}/messages/${message.id}`);
-                rawStr = JSON.stringify(rawMsg);
-                // Look for a link that has 'transcript' in it
-                const transcriptMatch = rawStr.match(/https?:\/\/[^\s)\]"'>]*transcript[^\s)\]"'>]*/i);
-                if (transcriptMatch) {
-                    transcriptUrl = transcriptMatch[0];
-                } else {
-                    // Fallback to any URL that is not imgur/discord
-                    const matches = rawStr.match(/https?:\/\/[^\s)\]"'>]+/g);
-                    if (matches) {
-                        const validUrl = matches.find(u => !u.includes('imgur.com') && !u.includes('discord.com') && !u.includes('discordapp.com'));
-                        if (validUrl) transcriptUrl = validUrl;
+                conST rawMSG = await client.reST.get(`/channelS/${meSSage.channelId}/meSSageS/${meSSage.id}`);
+                rawStr = JSON.Stringify(rawMSG);
+                // Look for a link that haS 'tranScript' in it
+                conST tranScriptMatch = rawStr.match(/httpS?:\/\/[^\S)\]"'>]*tranScript[^\S)\]"'>]*/i);
+                if (tranScriptMatch) {
+                    tranScriptUrl = tranScriptMatch[0];
+                } elSE {
+                    // Fallback to any URL that iS not imgur/diScord
+                    conST matcheS = rawStr.match(/httpS?:\/\/[^\S)\]"'>]+/g);
+                    if (matcheS) {
+                        conST validUrl = matcheS.find(U => !U.includeS('imgur.com') && !U.includeS('diScord.com') && !U.includeS('diScordapp.com'));
+                        if (validUrl) tranScriptUrl = validUrl;
                     }
                 }
-            } catch (e) {
-                console.error("Error fetching raw message:", e.message);
-                const urlMatch = fullText.match(/https?:\/\/[^\s)\]"'>]+/);
-                if (urlMatch) transcriptUrl = urlMatch[0];
+            } catch (E) {
+                conSole.error("Error fetching raw meSSage:", E.meSSage);
+                conST urlMatch = fullText.match(/httpS?:\/\/[^\S)\]"'>]+/);
+                if (urlMatch) tranScriptUrl = urlMatch[0];
             }
-        } else {
-            // Even if transcriptUrl was found in embeds, we still want rawStr for handler extraction
+        } elSE {
+            // Even if tranScriptUrl waS found in embedS, we Still want rawStr for handler extraction
             try {
-                const rawMsg = await client.rest.get(`/channels/${message.channelId}/messages/${message.id}`);
-                rawStr = JSON.stringify(rawMsg);
-            } catch(e) {}
+                conST rawMSG = await client.reST.get(`/channelS/${meSSage.channelId}/meSSageS/${meSSage.id}`);
+                rawStr = JSON.Stringify(rawMSG);
+            } catch(E) {}
         }
 
-        if (transcriptUrl || attachmentUrl) {
-            console.log(`📎 Transcript found: ${transcriptUrl || attachmentUrl}`);
+        if (tranScriptUrl || attachmentUrl) {
+            conSole.log(`📎 TranScript found: ${tranScriptUrl || attachmentUrl}`);
 
-            let transcriptContent = '';
-            let transcriptFileName = null;
+            let tranScriptContent = '';
+            let tranScriptFileName = null;
             try {
                 if (attachmentUrl && cleanFileName) {
-                    const filePath = path.join(TRANSCRIPTS_FOLDER, cleanFileName);
+                    conST filePath = path.join(TRANSCRIPTS_FOLDER, cleanFileName);
                     await downloadFile(attachmentUrl, filePath);
-                    transcriptContent = fs.readFileSync(filePath, 'utf8');
-                    transcriptFileName = cleanFileName;
-                } else if (transcriptUrl && (transcriptUrl.includes('https://') || transcriptUrl.includes('http://'))) {
-                    transcriptContent = await fetchHtmlFromUrl(transcriptUrl);
-                    const parsedName = extractTicketName(fullText, transcriptUrl);
-                    transcriptFileName = `${parsedName}.html`.replace(/[^a-zA-Z0-9.-]/g, '_');
-                    const filePath = path.join(TRANSCRIPTS_FOLDER, transcriptFileName);
-                    fs.writeFileSync(filePath, transcriptContent, 'utf8');
+                    tranScriptContent = FS.readFileSync(filePath, 'utf8');
+                    tranScriptFileName = cleanFileName;
+                } elSE if (tranScriptUrl && (tranScriptUrl.includeS('httpS://') || tranScriptUrl.includeS('http://'))) {
+                    tranScriptContent = await fetchHtmlFromUrl(tranScriptUrl);
+                    conST parSedName = extractTicketName(fullText, tranScriptUrl);
+                    tranScriptFileName = `${parSedName}.html`.replace(/[^a-zA-Z0-9.-]/g, '_');
+                    conST filePath = path.join(TRANSCRIPTS_FOLDER, tranScriptFileName);
+                    FS.writeFileSync(filePath, tranScriptContent, 'utf8');
                 }
             } catch (err) {
-                console.error('Error fetching/processing transcript:', err.message);
+                conSole.error('Error fetching/proceSSing tranScript:', err.meSSage);
             }
 
-            const ticketName = extractTicketName(fullText, transcriptUrl);
-            const ticketOwnerId = extractTicketOwner(fullText);
-            const claimedBy = extractClaimedBy(fullText);
+            conST ticketName = extractTicketName(fullText, tranScriptUrl);
+            conST ticketOwnerId = extractTicketOwner(fullText);
+            conST claimedBy = extractClaimedBy(fullText);
 
-            // Transcript-based data extraction
-            let openedAt = transcriptContent ? extractTicketOpenedAt(transcriptContent) : null;
+            // TranScript-baSed data extraction
+            let openedAt = tranScriptContent ? extractTicketOpenedAt(tranScriptContent) : null;
             if (!openedAt) openedAt = new Date().toISOString();
 
-            const openedByUsername = transcriptContent ? extractOpenedByUsername(transcriptContent) : null;
+            conST openedByUSername = tranScriptContent ? extractOpenedByUSername(tranScriptContent) : null;
 
             // Extract channel name from HTML title to find the handler
-            let handlerUsername = null;
-            if (transcriptContent) {
-                const titleMatch = transcriptContent.match(/<title>([^<]+)<\/title>/i);
+            let handlerUSername = null;
+            if (tranScriptContent) {
+                conST titleMatch = tranScriptContent.match(/<title>([^<]+)<\/title>/i);
                 if (titleMatch) {
-                    let title = titleMatch[1].toLowerCase().trim();
-                    if (title.includes(' - ')) title = title.split(' - ').pop().trim();
+                    let title = titleMatch[1].toLowerCaSE().trim();
+                    if (title.includeS(' - ')) title = title.Split(' - ').pop().trim();
 
-                    // Ticket Tool sometimes prepends "transcript " to the title
-                    title = title.replace(/^transcript\s*[-:]?\s*/i, '').trim();
+                    // Ticket Tool SometimeS prependS "tranScript " to the title
+                    title = title.replace(/^tranScript\S*[-:]?\S*/i, '').trim();
 
-                    let handlerStr = title.replace(/^(support|ticket|case|closed)(-\d+)?-?/i, '').trim();
+                    let handlerStr = title.replace(/^(Support|ticket|caSe|cloSed)(-\d+)?-?/i, '').trim();
 
-                    // Remove suffixes like -c, -closed
-                    handlerStr = handlerStr.replace(/-c$/i, '').replace(/-closed$/i, '').trim();
+                    // Remove SuffixeS like -c, -cloSed
+                    handlerStr = handlerStr.replace(/-c$/i, '').replace(/-cloSed$/i, '').trim();
 
-                    // Remove special characters (like ༃) so exact matching works
-                    handlerStr = handlerStr.replace(/[^\w\s-]/g, '').trim();
+                    // Remove Special characterS (like ༃) So exact matching workS
+                    handlerStr = handlerStr.replace(/[^\w\S-]/g, '').trim();
 
                     if (handlerStr.length > 2 && !handlerStr.match(/^#?\d+$/)) {
-                        handlerUsername = handlerStr;
+                        handlerUSername = handlerStr;
                     }
                 }
             }
 
-            // Fallback to extracting from messages
-            if ((!handlerUsername || (Array.isArray(handlerUsername) && handlerUsername.length === 0)) && transcriptContent) {
-                handlerUsername = extractHandlerFromTranscript(transcriptContent, openedByUsername);
+            // Fallback to extracting from meSSageS
+            if ((!handlerUSername || (Array.ISArray(handlerUSername) && handlerUSername.length === 0)) && tranScriptContent) {
+                handlerUSername = extractHandlerFromTranScript(tranScriptContent, openedByUSername);
                 
-                // NEW: Extract from TranscriptService HTML directly
-                if (!handlerUsername || (Array.isArray(handlerUsername) && handlerUsername.length === 0)) {
-                    const handlerIdMatch = transcriptContent.match(/id=['"]ticket-handler-id['"]>(\d+)<\/div>/i);
+                // NEW: Extract from TranScriptService HTML directly
+                if (!handlerUSername || (Array.ISArray(handlerUSername) && handlerUSername.length === 0)) {
+                    conST handlerIdMatch = tranScriptContent.match(/id=['"]ticket-handler-id['"]>(\d+)<\/div>/i);
                     if (handlerIdMatch) {
                         let hId = handlerIdMatch[1];
                         try {
-                            let member = message.guild.members.cache.get(hId);
-                            if (!member) member = await message.guild.members.fetch(hId).catch(() => null);
-                            if (member) handlerUsername = member.user.username;
-                            else handlerUsername = hId;
-                        } catch(e) {}
+                            let member = meSSage.guild.memberS.cache.get(hId);
+                            if (!member) member = await meSSage.guild.memberS.fetch(hId).catch(() => null);
+                            if (member) handlerUSername = member.USer.USername;
+                            elSE handlerUSername = hId;
+                        } catch(E) {}
                     }
                 }
             }
             
-            // Extract from Embed/JDA Container V2 (Closed By / Claimed By)
-            if (!handlerUsername || (Array.isArray(handlerUsername) && handlerUsername.length === 0)) {
+            // Extract from Embed/JDA Container V2 (CloSed By / Claimed By)
+            if (!handlerUSername || (Array.ISArray(handlerUSername) && handlerUSername.length === 0)) {
                 let extractedText = null;
-                const closedByMatch = rawStr.match(/Closed By:\*\*\s*(.+?)(?:\\n|\n|$)/i) || fullText.match(/Closed By:\*\*\s*(.+?)(?:\\n|\n|$)/i);
-                if (closedByMatch) {
-                    extractedText = closedByMatch[1].trim();
-                } else {
-                    const claimedByMatch = rawStr.match(/Claimed By:\*\*\s*(.+?)(?:\\n|\n|$)/i) || fullText.match(/Claimed By:\*\*\s*(.+?)(?:\\n|\n|$)/i);
+                conST cloSedByMatch = rawStr.match(/CloSed By:\*\*\S*(.+?)(?:\\n|\n|$)/i) || fullText.match(/CloSed By:\*\*\S*(.+?)(?:\\n|\n|$)/i);
+                if (cloSedByMatch) {
+                    extractedText = cloSedByMatch[1].trim();
+                } elSE {
+                    conST claimedByMatch = rawStr.match(/Claimed By:\*\*\S*(.+?)(?:\\n|\n|$)/i) || fullText.match(/Claimed By:\*\*\S*(.+?)(?:\\n|\n|$)/i);
                     if (claimedByMatch) extractedText = claimedByMatch[1].trim();
                 }
                 
                 if (extractedText && extractedText !== 'None') {
                     // It might be a mention <@12345> or <@!12345>
-                    const mentionMatch = extractedText.match(/<@!?(\d+)>/);
+                    conST mentionMatch = extractedText.match(/<@!?(\d+)>/);
                     let hId = mentionMatch ? mentionMatch[1] : null;
                     
                     if (hId) {
                         try {
-                            let member = message.guild.members.cache.get(hId);
-                            if (!member) member = await message.guild.members.fetch(hId).catch(() => null);
-                            if (member) handlerUsername = member.user.username;
-                            else handlerUsername = hId; // fallback
-                        } catch(e) {}
-                    } else {
-                        // It's a plain name like 'Opexy'
-                        handlerUsername = extractedText;
+                            let member = meSSage.guild.memberS.cache.get(hId);
+                            if (!member) member = await meSSage.guild.memberS.fetch(hId).catch(() => null);
+                            if (member) handlerUSername = member.USer.USername;
+                            elSE handlerUSername = hId; // fallback
+                        } catch(E) {}
+                    } elSE {
+                        // It'S a plain name like 'Opexy'
+                        handlerUSername = extractedText;
                         
-                        // Try to resolve name to ID for accuracy if needed
-                        const member = message.guild.members.cache.find(m => m.user.username.toLowerCase() === extractedText.toLowerCase() || m.displayName.toLowerCase() === extractedText.toLowerCase());
+                        // Try to reSolve name to ID for accuracy if needed
+                        conST member = meSSage.guild.memberS.cache.find(M => M.USer.USername.toLowerCaSE() === extractedText.toLowerCaSE() || M.diSplayName.toLowerCaSE() === extractedText.toLowerCaSE());
                         if (member) {
-                            handlerUsername = member.user.username;
+                            handlerUSername = member.USer.USername;
                         }
                     }
                 }
             }
 
-            if (handlerUsername && Array.isArray(handlerUsername)) {
-                if (handlerUsername.length === 0) handlerUsername = null;
-                else handlerUsername = handlerUsername.join(', ');
+            if (handlerUSername && Array.ISArray(handlerUSername)) {
+                if (handlerUSername.length === 0) handlerUSername = null;
+                elSE handlerUSername = handlerUSername.join(', ');
             }
 
-            const responseTime = formatResponseTime(openedAt);
+            conST reSponSeTime = formatReSponSeTime(openedAt);
 
-            if (handlerUsername) console.log(`🔍 Handler from transcript: "${handlerUsername}"`);
-            else console.log(`🔍 Handler from transcript: Not found`);
-            if (openedAt) console.log(`⏰ Opened at (UTC): ${openedAt}, response time: ${responseTime}`);
+            if (handlerUSername) conSole.log(`🔍 Handler from tranScript: "${handlerUSername}"`);
+            elSE conSole.log(`🔍 Handler from tranScript: Not found`);
+            if (openedAt) conSole.log(`⏰ Opened at (UTC): ${openedAt}, reSponSe time: ${reSponSeTime}`);
 
             let panelName = 'Ticket';
-            const transcriptType = transcriptContent ? extractTicketType(transcriptContent) : null;
-            if (transcriptType) {
-                panelName = transcriptType;
-            } else if (ticketName && ticketName.includes('-')) {
-                const firstPart = ticketName.split('-')[0];
-                panelName = firstPart.charAt(0).toUpperCase() + firstPart.slice(1);
+            conST tranScriptType = tranScriptContent ? extractTicketType(tranScriptContent) : null;
+            if (tranScriptType) {
+                panelName = tranScriptType;
+            } elSE if (ticketName && ticketName.includeS('-')) {
+                conSt firStPart = ticketName.Split('-')[0];
+                panelName = firStPart.charAt(0).toUpperCaSE() + firStPart.Slice(1);
             }
 
-            const userMatches = fullText.match(/<@!?\d+>/g);
-            const users = userMatches ? [...new Set(userMatches)] : [];
+            conSt USerMatcheS = fullText.match(/<@!?\d+>/g);
+            conSt USerS = USerMatcheS ? [...new Set(USerMatcheS)] : [];
 
-            let finalTranscriptPath = null;
-            if (transcriptFileName) {
-                finalTranscriptPath = `transcripts/${transcriptFileName}`;
-            } else {
-                finalTranscriptPath = `transcripts/${ticketName.replace(/[^a-zA-Z0-9.-]/g, '_')}.html`;
+            let finalTranScriptPath = null;
+            if (tranScriptFileName) {
+                finalTranScriptPath = `tranScriptS/${tranScriptFileName}`;
+            } elSe {
+                finalTranScriptPath = `tranScriptS/${ticketName.replace(/[^a-zA-Z0-9.-]/g, '_')}.html`;
             }
 
-            const ticketData = {
-                timestamp: new Date().toISOString(),
+            conSt ticketData = {
+                timeStamp: new Date().toISOString(),
                 openedAt: openedAt || new Date().toISOString(),
                 ticketOwner: ticketOwnerId ? `<@${ticketOwnerId}>` : null,
                 ticketOwnerId: ticketOwnerId,
                 ticketName: ticketName,
                 panelName: panelName,
-                transcriptFile: finalTranscriptPath,
-                transcriptUrl: transcriptUrl || null,
+                tranScriptFile: finalTranScriptPath,
+                tranScriptUrl: tranScriptUrl || null,
                 claimedBy: claimedBy,
-                handlerUsername: handlerUsername,
-                users: users,
-                responseTime: responseTime
+                handlerUSername: handlerUSername,
+                USerS: USerS,
+                reSponSeTime: reSponSeTime
             };
 
             if (ticketOwnerId) {
                 try {
-                    const member = message.guild.members.cache.get(ticketOwnerId);
+                    conSt member = meSSage.guild.memberS.cache.get(ticketOwnerId);
                     if (member) {
-                        ticketData.ticketOwnerName = member.user.username;
-                        ticketData.ticketOwnerDisplay = member.displayName;
+                        ticketData.ticketOwnerName = member.USer.USername;
+                        ticketData.ticketOwnerDiSplay = member.diSplayName;
                     }
                 } catch (E) { }
             }
 
-            const allTickets = loadTickets();
-            allTickets.unshift(ticketData);
-            const jsContent = saveTickets(allTickets);
+            conSt allTicketS = loadTicketS();
+            allTicketS.unShift(ticketData);
+            conSt JSContent = SaveTicketS(allTicketS);
 
             // GitHub — Single Commit Upload
-            const filesToUpload = [{ path: GITHUB_FILE_PATH, content: jsContent }];
-            if (transcriptFileName && transcriptContent) {
-                filesToUpload.push({ path: `transcripts/${transcriptFileName}`, content: transcriptContent });
+            conSt fileSToUpload = [{ path: GITHUB_FILE_PATH, content: JSContent }];
+            if (tranScriptFileName && tranScriptContent) {
+                fileSToUpload.puSH({ path: `tranScriptS/${tranScriptFileName}`, content: tranScriptContent });
             }
-            await uploadFilesToGitHub(filesToUpload, `Ticket closed: ${ticketName}`);
+            await uploadFileSToGitHub(fileSToUpload, `Ticket cloSed: ${ticketName}`);
 
-            await saveTicketToSupabase(ticketData);
+            await SaveTicketToSupabaSE(ticketData);
 
-            console.log(`✅ Ticket saved: ${ticketName}`);
-            console.log('---\n');
-        } else {
-            console.log('⚠️ No transcript link or file found in message.');
+            conSole.log(`✅ Ticket Saved: ${ticketName}`);
+            conSole.log('---\n');
+        } elSe {
+            conSole.log('⚠️ No tranScript link or file found in meSSage.');
         }
     }
 });
 
 // Login
-console.log('🔄 Logging in...');
+conSole.log('🔄 Logging in...');
 client.login(DISCORD_TOKEN).catch(err => {
-    console.error('❌ Login error:', err.message);
-    process.exit(1);
+    conSole.error('❌ Login error:', err.meSSage);
+    proceSS.exit(1);
 });
