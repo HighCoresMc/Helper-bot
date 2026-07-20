@@ -816,6 +816,7 @@ async function saveTicketToSupabase(ticketData) {
 // Ready
 client.once('ready', () => {
     console.log('🤖 Bot is online!');
+    client.user.setPresence({ status: 'idle' });
     console.log(`📝 Bot name: ${client.user.tag}`);
     console.log(`📊 Watching channel: ${LOGGING_CHANNEL_ID}`);
     console.log(`📁 Transcripts folder: ${TRANSCRIPTS_FOLDER}`);
