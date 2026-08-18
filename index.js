@@ -776,80 +776,60 @@ async function fetchMCStatus() {
                 const message = await statusChannel.messages.fetch(MC_STATUS_MESSAGE_ID);
                 console.log('📨 Embed found, fields:', message.embeds[0]?.fields?.length || 0, '| desc preview:', message.embeds[0]?.description?.substring(0, 120)?.replace(/\n/g, ' ') || 'none');
 
-                if (message && message.embeds && message.embeds.length > 0) {
-                    const embed = message.embeds[0];
+                if (message) {
+                    let fullText = message.content || "";
 
-                    if (embed.description) {
-                        const desc = embed.description;
-
-                        // Status detection from description text/emoji
-                        if (desc.includes('🟢') || /open|players can join/i.test(desc)) {
-                            mcData.serverStatus = 'Online';
-                        }
-                        if (desc.includes('🔴') || /server is offline|server is down/i.test(desc)) {
-                            mcData.serverStatus = 'Offline';
-                        }
-
-                        const pingMatch = desc.match(/(?:Server\s+)?Ping[^\d]*(\d+)/i);
-                        if (pingMatch) mcData.serverPing = pingMatch[1] + 'ms';
-
-                        const healthMatch = desc.match(/Health[^\d]*([\d.]+)/i);
-                        if (healthMatch) mcData.health = healthMatch[1] + '%';
-
-                        const peakMatch = desc.match(/Peak\s+Players[^\d]*(\d+)/i);
-                        if (peakMatch) mcData.peakPlayers = peakMatch[1];
-
-                        const loginsMatch = desc.match(/Total\s+Logins[^\d]*(\d+)/i);
-                        if (loginsMatch) mcData.totalLogins = loginsMatch[1];
-
-                        const availMatch = desc.match(/Availability[^\d]*([\d.]+)/i);
-                        if (availMatch) mcData.availability = availMatch[1] + '%';
-
-                        const ipMatch = desc.match(/(?:Java\s+)?IP[^\d]*([\d.:]+)/i);
-                        if (ipMatch) mcData.serverIP = ipMatch[1];
-
-                        // Players from description
-                        const playersDesc = desc.match(/Players\s+Online[^\d]*(\d+)\s*[\/|]\s*(\d+)/i);
-                        if (playersDesc) {
-                            mcData.playersOnline = playersDesc[1];
-                            mcData.maxPlayers = playersDesc[2];
-                        }
-
-                        // Uptime from description
-                        const uptimeDesc = desc.match(/Uptime[:\s]*(\d+h\s*\d+m(?:\s*\d+s)?|\d+m(?:\s*\d+s)?)/i);
-                        if (uptimeDesc) mcData.uptime = uptimeDesc[1].trim();
+                    if (message.embeds && message.embeds.length > 0) {
+                        fullText += "\n" + message.embeds.map(e => {
+                            let text = (e.title || "") + " " + (e.description || "") + "\n";
+                            if (e.fields) {
+                                text += e.fields.map(f => f.name + " " + f.value).join("\n");
+                            }
+                            return text;
+                        }).join("\n\n");
                     }
 
-                    if (embed.fields && embed.fields.length > 0) {
-                        embed.fields.forEach(field => {
-                            const name = field.name.toLowerCase();
-                            const value = field.value.replace(/`/g, '').trim();
+                    // Use toJSON() to get raw API data, avoiding discord.js stripping unknown component fields
+                    try { fullText += "\n" + JSON.stringify(message.toJSON()); } catch (e) {}
+                    try { fullText += "\n" + JSON.stringify(message.components); } catch (e) {}
 
-                            if (name.includes('ping')) {
-                                const pingVal = value.match(/\d+/);
-                                if (pingVal) mcData.serverPing = pingVal[0] + 'ms';
-                            }
-                            else if (name.includes('health')) {
-                                const healthVal = value.match(/[\d.]+/);
-                                if (healthVal) mcData.health = healthVal[0] + '%';
-                            }
-                            else if (name.includes('availability')) {
-                                const availVal = value.match(/[\d.]+/);
-                                if (availVal) mcData.availability = availVal[0] + '%';
-                            }
-                            else if (name.includes('peak')) {
-                                const peakVal = value.match(/\d+/);
-                                if (peakVal) mcData.peakPlayers = peakVal[0];
-                            }
-                            else if (name.includes('logins')) {
-                                const loginsVal = value.match(/\d+/);
-                                if (loginsVal) mcData.totalLogins = loginsVal[0];
-                            }
-                            else if (name.includes('server ip') || name.includes('ip')) {
-                                mcData.serverIP = value.split('\n')[0].trim();
-                            }
-                        });
+                    const desc = fullText;
+
+                    // Status detection from description text/emoji
+                    if (desc.includes('🟢') || /open|players can join/i.test(desc)) {
+                        mcData.serverStatus = 'Online';
                     }
+                    if (desc.includes('🔴') || /server is offline|server is down/i.test(desc)) {
+                        mcData.serverStatus = 'Offline';
+                    }
+
+                    const pingMatch = desc.match(/(?:Server\s+)?Ping[^\d]*(\d+)/i);
+                    if (pingMatch) mcData.serverPing = pingMatch[1] + 'ms';
+
+                    const healthMatch = desc.match(/Health[^\d]*([\d.]+)/i);
+                    if (healthMatch) mcData.health = healthMatch[1] + '%';
+
+                    const peakMatch = desc.match(/Peak\s+Players[^\d]*(\d+)/i);
+                    if (peakMatch) mcData.peakPlayers = peakMatch[1];
+
+                    const loginsMatch = desc.match(/Total\s+Logins[^\d]*(\d+)/i);
+                    if (loginsMatch) mcData.totalLogins = loginsMatch[1];
+
+                    const availMatch = desc.match(/Availability[^\d]*([\d.]+)/i);
+                    if (availMatch) mcData.availability = availMatch[1] + '%';
+
+                    const ipMatch = desc.match(/(?:Java\s+)?IP[^\d]*([\d.:]+)/i);
+                    if (ipMatch) mcData.serverIP = ipMatch[1];
+
+                    const playersDesc = desc.match(/Players\s+Online[^\d]*(\d+)\s*[\/|]\s*(\d+)/i);
+                    if (playersDesc) {
+                        mcData.playersOnline = playersDesc[1];
+                        mcData.maxPlayers = playersDesc[2];
+                    }
+
+                    // Uptime could be "Uptime:** `5m 39s`" -> we want to capture "5m 39s"
+                    const uptimeDesc = desc.match(/Uptime[^\d]*(\d+h\s*\d+m(?:\s*\d+s)?|\d+m(?:\s*\d+s)?|\d+h|\d+s)/i);
+                    if (uptimeDesc) mcData.uptime = uptimeDesc[1].trim();
                 }
             } else {
                 console.log('⚠️ Could not find status channel');
