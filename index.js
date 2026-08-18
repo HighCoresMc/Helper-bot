@@ -334,12 +334,12 @@ async function lookupEmployee(identifier) {
             const searchName = identifier.replace(/^@/, '').trim();
             emp = await prisma.employees.findMany({ where: { name: { contains: searchName, mode: 'insensitive' } } });
         }
-        
+
         // Convert BigInt to String for JSON compatibility (simulating original REST API response)
         const serialized = JSON.parse(JSON.stringify(emp, (key, value) =>
             typeof value === 'bigint' ? value.toString() : value
         ));
-        
+
         return serialized;
     } catch (e) {
         console.error('lookupEmployee error:', e);
@@ -426,7 +426,7 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
                 });
 
                 const data = await response.json();
-                
+
                 if (data.error) {
                     throw new Error(data.error.message);
                 }
@@ -449,7 +449,7 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 
         let cleanJson = responseText.replace(/\s*```json/gi, '').replace(/```/g, '').trim();
         const json = JSON.parse(cleanJson);
-        
+
         // Calculate total manually to be safe
         const calculatedTotal = (json.ticket_type_points || 0) + (json.responses_points || 0) + (json.level_speed_points || 0);
         const finalPoints = json.total_points !== undefined ? json.total_points : calculatedTotal;
@@ -635,7 +635,7 @@ async function saveTicketToSupabase(ticketData) {
         }
 
         const closedAt = new Date().toISOString();
-        
+
         const basePayload = {
             ticket_id: ticketData.ticketName,
             title: ticketData.panelName || 'Support Request',
@@ -653,7 +653,7 @@ async function saveTicketToSupabase(ticketData) {
         } else {
             await prisma.tickets.create({ data: basePayload });
         }
-        
+
         console.log(`✅ Ticket saved to DB — emp: ${empName}, pts: ${ptsToAward}`);
     } catch (err) {
         console.error('❌ saveTicketToSupabase error:', err.message);
@@ -889,8 +889,8 @@ async function fetchDiscordStats() {
             console.error('Prisma Error fetching tickets count:', e.message);
         }
 
-        const onlineStaff = guild.members.cache.filter(m => 
-            m.roles.cache.has(STAFF_ROLE_ID) && 
+        const onlineStaff = guild.members.cache.filter(m =>
+            m.roles.cache.has(STAFF_ROLE_ID) &&
             m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)
         ).size;
 
