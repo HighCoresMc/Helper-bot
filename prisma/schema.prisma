@@ -1,0 +1,159 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model activity_log {
+  id          Int       @id @default(autoincrement())
+  action_type String?
+  details     String?
+  category    String?
+  user_name   String?
+  created_at  DateTime? @db.Timestamptz(6)
+}
+
+model criteria {
+  id         Int     @id @default(autoincrement())
+  name       String?
+  icon       String?
+  descr      String?
+  items_json Json?
+}
+
+model employees {
+  id         Int       @id @default(autoincrement())
+  name       String?
+  role       String?
+  avatar     String?
+  color      String?
+  points     Int?
+  tickets    Int?
+  created_at DateTime? @db.Timestamptz(6)
+  discord_id BigInt?
+  dc_points  Int?
+  mc_points  Int?
+  section    Json?
+}
+
+model event_supervisors {
+  id                  Int       @id @default(autoincrement())
+  event_id            BigInt?
+  emp_id              BigInt?
+  emp_name            String?
+  claimed_at          DateTime? @db.Timestamptz(6)
+  report_submitted    Boolean?
+  report_text         String?
+  report_image        String?
+  report_submitted_at String?
+  attendance          String?
+  points_awarded      Int?
+  review_status       String?
+  reviewed_by         String?
+  reviewed_at         String?
+}
+
+model history {
+  id         Int       @id @default(autoincrement())
+  timestamp  DateTime? @db.Timestamptz(6)
+  username   String?
+  action     String?
+  details    String?
+  category   String?
+  created_at DateTime? @db.Timestamptz(6)
+}
+
+model mc_event_participants {
+  id                 Int       @id @default(autoincrement())
+  event_id           BigInt?
+  emp_id             BigInt?
+  status             String?
+  role_description   String?
+  performance_rating String?
+  evidence_url       String?
+  attendance_type    String?
+  points_awarded     Int?
+  review_note        String?
+  reserved_at        DateTime? @db.Timestamptz(6)
+  submitted_at       String?
+}
+
+model ranks {
+  id          Int     @id @default(autoincrement())
+  name        String?
+  emoji       String?
+  min_pts     Int?
+  max_pts     Int?
+  color       String?
+  perks       String?
+  badge_class String?
+  sort_order  Int?
+}
+
+model recent_activities {
+  id            Int       @id @default(autoincrement())
+  emp_name      String?
+  action        String?
+  pts           Int?
+  activity_type String?
+  created_at    DateTime? @db.Timestamptz(6)
+}
+
+/// The underlying table does not contain a valid unique identifier and can therefore currently not be handled by Prisma Client.
+model roles {
+  id              String    @id
+  name            String?
+  permissions     String?
+  discord_roles   String?
+  priority        Int?
+  is_fixed        Boolean?
+  created_at      DateTime? @db.Timestamptz(6)
+  department_type String?
+
+  @@ignore
+}
+
+model settings {
+  id    Int     @id @default(autoincrement())
+  key   String?
+  value String?
+}
+
+model tasks_log {
+  id         Int       @id @default(autoincrement())
+  task_id    BigInt?
+  task_title String?
+  emp_name   String?
+  action     String?
+  points     Int?
+  section    String?
+  created_at DateTime? @db.Timestamptz(6)
+}
+
+model tickets {
+  id            Int       @id @default(autoincrement())
+  ticket_id     String?
+  title         String?
+  emp_id        BigInt?
+  status        String?
+  pts           Int?
+  response_time String?
+  created_at    DateTime? @db.Timestamptz(6)
+  closed_at     String?
+}
+
+model whitelist {
+  id          Int       @id @default(autoincrement())
+  admin       String?
+  discord     String?
+  mc          String?
+  version     String?
+  type        String?
+  team        String?
+  tag         String?
+  created_at  DateTime? @db.Timestamptz(6)
+  modified_at DateTime? @db.Timestamptz(6)
+}

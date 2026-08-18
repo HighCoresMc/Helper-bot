@@ -46,9 +46,8 @@ const client = new Client({
     ]
 });
 
-// Supabase
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_KEY = process.env.SUPABASE_KEY;
+// Prisma
+const { prisma } = require('./prisma');
 const GUILD_ID = process.env.GUILD_ID;
 
 // Roles
@@ -81,80 +80,29 @@ async function updateOnlineAdmins() {
 
         console.log('👥 Online Staff:', count, names ? '(' + names + ')' : '(none)');
 
-        console.log('🔄 Sending to Supabase... URL:', SUPABASE_URL ? 'OK' : 'MISSING', 'KEY:', SUPABASE_KEY ? 'OK' : 'MISSING');
-        if (!SUPABASE_URL || !SUPABASE_KEY) { console.error('❌ SUPABASE_URL or SUPABASE_KEY missing!'); return; }
-
         const valueJson = JSON.stringify({ count, names, updated: new Date().toISOString() });
-        const patchPayload = JSON.stringify({ value: valueJson });
-        const https2 = require('https');
-        const urlObj = new URL(SUPABASE_URL + '/rest/v1/settings');
-
-        const options = {
-            hostname: urlObj.hostname,
-            path: urlObj.pathname + '?key=eq.admin_online',
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-                'apikey': SUPABASE_KEY,
-                'Authorization': 'Bearer ' + SUPABASE_KEY,
-                'Content-Length': Buffer.byteLength(patchPayload)
-            }
-        };
-
-        await new Promise((resolve, reject) => {
-            const req = https2.request(options, res => {
-                let body = '';
-                res.on('data', c => body += c);
-                res.on('end', () => {
-                    if (res.statusCode >= 400) {
-                        console.error('Supabase error:', res.statusCode, body);
-                    } else {
-                        console.log('✅ Supabase updated — online:', count);
-                    }
-                    resolve();
-                });
-            });
-            req.on('error', reject);
-            req.write(patchPayload);
-            req.end();
-        });
-
-    } catch (err) {
-        console.error('❌ updateOnlineAdmins error:', err.message);
-    }
-}
-
-// Tickets — Load
-function loadTickets() {
-    if (fs.existsSync(TICKETS_FILE)) {
-        const data = fs.readFileSync(TICKETS_FILE, 'utf8');
-        const match = data.match(/window\.ticketsData\s*=\s*(\[[\s\S]*\]);/);
-        if (match) {
-            return JSON.parse(match[1]);
+        const existing = await prisma.settings.findFirst({ where: { key: 'admin_online' } });
+        if (existing) {
+            await prisma.settings.update({ where: { id: existing.id }, data: { value: valueJson } });
+        } else {
+            await prisma.settings.create({ data: { key: 'admin_online', value: valueJson } });
         }
+        console.log('✅ DB updated — online:', count);
+    } catch (e) {
+        console.error('❌ updateOnlineAdmins Error:', e);
     }
-    return [];
 }
 
-// Tickets — Save
-function saveTickets(tickets) {
-    const jsContent = `// Tickets Data\nwindow.ticketsData = ${JSON.stringify(tickets, null, 2)};\n`;
-    fs.writeFileSync(TICKETS_FILE, jsContent, 'utf8');
-    console.log('✅ Saved tickets.js');
-    return jsContent;
-}
-
-// GitHub — API Request
-function githubApiRequest(method, path, body) {
+function githubApiRequest(method, endpoint, payload = null) {
     return new Promise((resolve, reject) => {
-        const payload = body ? JSON.stringify(body) : null;
+        payload = payload ? JSON.stringify(payload) : null;
         const options = {
             hostname: 'api.github.com',
-            path,
-            method,
+            path: endpoint,
+            method: method,
             headers: {
+                'User-Agent': 'HighCore-Bot',
                 'Authorization': `token ${GITHUB_TOKEN}`,
-                'User-Agent': 'Ticket-Bot',
                 'Accept': 'application/vnd.github.v3+json',
                 ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) } : {})
             }
@@ -376,26 +324,27 @@ async function resolveDisplayNameToDiscordId(displayName) {
 
 // Supabase — Lookup Employee
 async function lookupEmployee(identifier) {
-    const isDiscordId = /^\d{15,22}$/.test(identifier);
-    let empPath = isDiscordId
-        ? '/rest/v1/employees?discord_id=eq.' + identifier
-        : '/rest/v1/employees?name=ilike.' + encodeURIComponent(identifier.replace(/^@/, '').trim());
-    const empUrl = new URL(SUPABASE_URL + empPath);
-    return new Promise((resolve) => {
-        const options = {
-            hostname: empUrl.hostname,
-            path: empUrl.pathname + empUrl.search,
-            method: 'GET',
-            headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY }
-        };
-        const req = https.request(options, res => {
-            let body = '';
-            res.on('data', c => body += c);
-            res.on('end', () => { try { resolve(JSON.parse(body)); } catch (e) { resolve([]); } });
-        });
-        req.on('error', () => resolve([]));
-        req.end();
-    });
+    try {
+        const isDiscordId = /^\d{15,22}$/.test(identifier);
+        let emp;
+        if (isDiscordId) {
+            // Prisma stores discord_id as BigInt, we need to convert identifier string to BigInt
+            emp = await prisma.employees.findMany({ where: { discord_id: BigInt(identifier) } });
+        } else {
+            const searchName = identifier.replace(/^@/, '').trim();
+            emp = await prisma.employees.findMany({ where: { name: { contains: searchName, mode: 'insensitive' } } });
+        }
+        
+        // Convert BigInt to String for JSON compatibility (simulating original REST API response)
+        const serialized = JSON.parse(JSON.stringify(emp, (key, value) =>
+            typeof value === 'bigint' ? value.toString() : value
+        ));
+        
+        return serialized;
+    } catch (e) {
+        console.error('lookupEmployee error:', e);
+        return [];
+    }
 }
 
 function extractTextFromTranscript(html) {
@@ -519,7 +468,6 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
 
 // Supabase — Save Ticket
 async function saveTicketToSupabase(ticketData) {
-    if (!SUPABASE_URL || !SUPABASE_KEY) return;
     try {
         let empId = null;
         let empPoints = 0;
@@ -529,7 +477,6 @@ async function saveTicketToSupabase(ticketData) {
         let resolvedClaimedBy = null;
         let emp = null;
 
-        // Collect all possible handlers
         let possibleHandlers = [];
         if (ticketData.handlerUsername) {
             if (Array.isArray(ticketData.handlerUsername)) {
@@ -559,7 +506,6 @@ async function saveTicketToSupabase(ticketData) {
                 }
             }
 
-            // Try looking up employee in DB
             let empRes = await lookupEmployee(currentId);
             if (Array.isArray(empRes) && empRes.length > 0) {
                 emp = empRes[0];
@@ -573,7 +519,6 @@ async function saveTicketToSupabase(ticketData) {
                 break;
             }
 
-            // If not in DB, check if they are actually a staff member (for auto-create)
             const guild = client.guilds.cache.get(GUILD_ID);
             if (guild && typeof STAFF_ROLE_ID !== 'undefined') {
                 const member = guild.members.cache.get(currentId);
@@ -586,7 +531,6 @@ async function saveTicketToSupabase(ticketData) {
         }
 
         if (!emp && resolvedClaimedBy) {
-            // Auto-create if it's a discord ID with staff role
             const isDiscordId = /^\d{15,22}$/.test(resolvedClaimedBy);
             if (isDiscordId) {
                 try {
@@ -594,12 +538,10 @@ async function saveTicketToSupabase(ticketData) {
                     if (guild) {
                         const member = await guild.members.fetch(resolvedClaimedBy).catch(() => null);
                         if (member && typeof STAFF_ROLE_ID !== 'undefined' && member.roles.cache.has(STAFF_ROLE_ID)) {
-                            const newId = Math.floor(100000000 + Math.random() * 900000000);
                             const displayName = member.displayName;
-                            const newEmp = {
-                                id: newId,
+                            const newEmpData = {
                                 name: displayName,
-                                discord_id: resolvedClaimedBy,
+                                discord_id: BigInt(resolvedClaimedBy),
                                 points: 0,
                                 dc_points: 0,
                                 mc_points: 0,
@@ -607,35 +549,14 @@ async function saveTicketToSupabase(ticketData) {
                                 role: 'Staff',
                                 avatar: displayName.charAt(0).toUpperCase() || 'S',
                                 color: '#5C9EFF',
-                                section: JSON.stringify({
+                                section: {
                                     job_titles: [{ title: 'Staff', is_main: true }],
                                     rank_override: null
-                                })
+                                }
                             };
-                            const insertEmpUrl = new URL(SUPABASE_URL + '/rest/v1/employees');
-                            const insertPayload = JSON.stringify(newEmp);
-                            await new Promise((resolveInsert) => {
-                                const options = {
-                                    hostname: insertEmpUrl.hostname,
-                                    path: insertEmpUrl.pathname,
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'apikey': SUPABASE_KEY,
-                                        'Authorization': 'Bearer ' + SUPABASE_KEY,
-                                        'Prefer': 'return=minimal',
-                                        'Content-Length': Buffer.byteLength(insertPayload)
-                                    }
-                                };
-                                const req = https.request(options, res => {
-                                    res.on('data', () => { });
-                                    res.on('end', () => resolveInsert());
-                                });
-                                req.on('error', () => resolveInsert());
-                                req.write(insertPayload);
-                                req.end();
-                            });
-                            emp = newEmp;
+                            const createdEmp = await prisma.employees.create({ data: newEmpData });
+                            // Convert BigInt to string for compatibility
+                            emp = JSON.parse(JSON.stringify(createdEmp, (key, value) => typeof value === 'bigint' ? value.toString() : value));
                             console.log(`✅ Auto-created employee: ${displayName}`);
                         }
                     }
@@ -646,7 +567,7 @@ async function saveTicketToSupabase(ticketData) {
         }
 
         if (emp) {
-            empId = emp.id;
+            empId = BigInt(emp.id);
             empPoints = emp.points || 0;
             empDcPoints = emp.dc_points || 0;
             empTickets = emp.tickets || 0;
@@ -655,7 +576,6 @@ async function saveTicketToSupabase(ticketData) {
             console.log(`⚠️ Employee not found for: ${resolvedClaimedBy}`);
         }
 
-        // --- AI Analysis ---
         let ptsToAward = 0;
         let aiReasoning = "Ticket Closed";
         let aiBreakdown = {};
@@ -678,115 +598,44 @@ async function saveTicketToSupabase(ticketData) {
         if (empId && ptsToAward !== 0) {
             const newPoints = empPoints + ptsToAward;
             const newDcPoints = empDcPoints + ptsToAward;
-            // if newEmp was created, tickets is 0 + 1 = 1. if existing, tickets_handled or tickets
             let currentTickets = empTickets !== undefined ? empTickets : 0;
             const newTickets = currentTickets + 1;
 
-            const patchPayload = JSON.stringify({ points: newPoints, dc_points: newDcPoints, tickets: newTickets });
-            const empPatchUrl = new URL(SUPABASE_URL + '/rest/v1/employees?id=eq.' + empId);
-            await new Promise((resolve) => {
-                const options = {
-                    hostname: empPatchUrl.hostname,
-                    path: empPatchUrl.pathname + empPatchUrl.search,
-                    method: 'PATCH',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY,
-                        'Content-Length': Buffer.byteLength(patchPayload)
-                    }
-                };
-                const req = https.request(options, res => {
-                    res.on('data', () => { });
-                    res.on('end', () => resolve());
-                });
-                req.on('error', () => resolve());
-                req.write(patchPayload);
-                req.end();
+            await prisma.employees.update({
+                where: { id: Number(empId) },
+                data: { points: newPoints, dc_points: newDcPoints, tickets: newTickets }
             });
 
             try {
                 const actionVerb = ptsToAward > 0 ? 'added' : (ptsToAward < 0 ? 'deducted' : 'added');
                 const preposition = ptsToAward > 0 ? 'to' : (ptsToAward < 0 ? 'from' : 'to');
-
-                // Log 1: For 'Recent Activities' (Points category, System as user)
-                const logRecent = JSON.stringify({
-                    action_type: 'Update Points',
-                    details: `Successfully ${actionVerb} ${Math.abs(ptsToAward)} points ${preposition} ${empName}. Reason: Ticket ${ticketData.ticketName} Evaluation`,
-                    category: 'Points',
-                    user_name: 'System',
-                    created_at: new Date().toISOString()
-                });
-
                 const actionVerbFull = ptsToAward > 0 ? 'Awarded' : (ptsToAward < 0 ? 'Deducted' : 'Awarded');
 
-                // Log 2: For 'Activity Logs' full table (Tickets category, System as user, detailed breakdown)
-                const logFull = JSON.stringify({
-                    action_type: 'Closed Ticket',
-                    details: `[AI Evaluation] ${actionVerbFull} ${Math.abs(ptsToAward)} PTS ${preposition} ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
-                    category: 'Tickets',
-                    user_name: 'System',
-                    created_at: new Date().toISOString()
-                });
-
-                const logUrl = new URL(SUPABASE_URL + '/rest/v1/activity_log');
-
-                const sendLog = (payloadStr) => new Promise((resolveLog) => {
-                    const options = {
-                        hostname: logUrl.hostname,
-                        path: logUrl.pathname,
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'apikey': SUPABASE_KEY,
-                            'Authorization': 'Bearer ' + SUPABASE_KEY,
-                            'Content-Length': Buffer.byteLength(payloadStr)
+                await prisma.activity_log.createMany({
+                    data: [
+                        {
+                            action_type: 'Update Points',
+                            details: `Successfully ${actionVerb} ${Math.abs(ptsToAward)} points ${preposition} ${empName}. Reason: Ticket ${ticketData.ticketName} Evaluation`,
+                            category: 'Points',
+                            user_name: 'System',
+                            created_at: new Date()
+                        },
+                        {
+                            action_type: 'Closed Ticket',
+                            details: `[AI Evaluation] ${actionVerbFull} ${Math.abs(ptsToAward)} PTS ${preposition} ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
+                            category: 'Tickets',
+                            user_name: 'System',
+                            created_at: new Date()
                         }
-                    };
-                    const reqLog = https.request(options, res => {
-                        res.on('data', () => { });
-                        res.on('end', resolveLog);
-                    });
-                    reqLog.on('error', resolveLog);
-                    reqLog.write(payloadStr);
-                    reqLog.end();
+                    ]
                 });
-
-                await Promise.all([sendLog(logRecent), sendLog(logFull)]);
             } catch (err) {
                 console.error('Failed to log activity:', err.message);
             }
         }
 
         const closedAt = new Date().toISOString();
-
-        const doInsert = (payload) => {
-            const payloadStr = JSON.stringify(payload);
-            const insertUrl = new URL(SUPABASE_URL + '/rest/v1/tickets?on_conflict=ticket_id');
-            return new Promise((resolve) => {
-                const options = {
-                    hostname: insertUrl.hostname,
-                    path: insertUrl.pathname + insertUrl.search,
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY,
-                        'Prefer': 'return=minimal, resolution=merge-duplicates',
-                        'Content-Length': Buffer.byteLength(payloadStr)
-                    }
-                };
-                const req = https.request(options, res => {
-                    let body = '';
-                    res.on('data', c => body += c);
-                    res.on('end', () => resolve({ status: res.statusCode, body }));
-                });
-                req.on('error', (e) => { console.error('❌ Supabase INSERT network error:', e.message); resolve({ status: 0, body: '' }); });
-                req.write(payloadStr);
-                req.end();
-            });
-        };
-
+        
         const basePayload = {
             ticket_id: ticketData.ticketName,
             title: ticketData.panelName || 'Support Request',
@@ -794,20 +643,18 @@ async function saveTicketToSupabase(ticketData) {
             status: 'closed',
             pts: ptsToAward,
             response_time: ticketData.responseTime || 'N/A',
-            created_at: ticketData.openedAt || ticketData.timestamp
+            created_at: ticketData.openedAt ? new Date(ticketData.openedAt) : new Date(ticketData.timestamp),
+            closed_at: closedAt
         };
 
-        // Try with closed_at first; if column missing, retry without it
-        let result = await doInsert({ ...basePayload, closed_at: closedAt });
-        if (result.status >= 400 && result.body.includes('closed_at')) {
-            console.log('⚠️ closed_at column missing — retrying without it (add it in Supabase SQL Editor)');
-            result = await doInsert(basePayload);
-        }
-        if (result.status >= 400) {
-            console.error('❌ Supabase tickets INSERT failed:', result.status, result.body);
+        const existingTicket = await prisma.tickets.findFirst({ where: { ticket_id: ticketData.ticketName } });
+        if (existingTicket) {
+            await prisma.tickets.update({ where: { id: existingTicket.id }, data: basePayload });
         } else {
-            console.log(`✅ Ticket saved to Supabase — emp: ${empName}, pts: ${ptsToAward}`);
+            await prisma.tickets.create({ data: basePayload });
         }
+        
+        console.log(`✅ Ticket saved to DB — emp: ${empName}, pts: ${ptsToAward}`);
     } catch (err) {
         console.error('❌ saveTicketToSupabase error:', err.message);
     }
@@ -1036,66 +883,31 @@ async function fetchDiscordStats() {
         }
 
         let closedTickets = 0;
-
         try {
-            const ticketsUrl = new URL(SUPABASE_URL + '/rest/v1/tickets?select=status');
-            const ticketsResponse = await new Promise((resolve, reject) => {
-                const options = {
-                    hostname: ticketsUrl.hostname,
-                    path: ticketsUrl.pathname + ticketsUrl.search,
-                    method: 'GET',
-                    headers: {
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': 'Bearer ' + SUPABASE_KEY
-                    }
-                };
-
-                const req = https.request(options, res => {
-                    let body = '';
-                    res.on('data', c => body += c);
-                    res.on('end', () => {
-                        try {
-                            resolve(JSON.parse(body));
-                        } catch (e) {
-                            resolve([]);
-                        }
-                    });
-                });
-                req.on('error', () => resolve([]));
-                req.end();
-            });
-
-            if (Array.isArray(ticketsResponse)) {
-                ticketsResponse.forEach(t => {
-                    if (t.status === 'open' || t.status === 'Open' || t.status === 'pending') {
-                        openTickets++;
-                    } else {
-                        closedTickets++;
-                    }
-                });
-            }
+            closedTickets = await prisma.tickets.count();
         } catch (e) {
-            console.log('Could not fetch tickets count:', e.message);
+            console.error('Prisma Error fetching tickets count:', e.message);
         }
+
+        const onlineStaff = guild.members.cache.filter(m => 
+            m.roles.cache.has(STAFF_ROLE_ID) && 
+            m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)
+        ).size;
 
         const dcData = {
             totalMembers: guild.memberCount,
             onlineMembers: onlineMembers,
             totalChannels: guild.channels.cache.size,
-            totalRoles: guild.roles.cache.size,
             boostLevel: guild.premiumTier,
             boostCount: guild.premiumSubscriptionCount || 0,
             openTickets: openTickets,
             closedTickets: closedTickets,
-            onlineStaff: guild.members.cache.filter(m => m.roles.cache.has(STAFF_ROLE_ID) && m.presence && ['online', 'dnd', 'idle'].includes(m.presence.status)).size,
-            lastUpdated: new Date().toISOString()
+            onlineStaff: onlineStaff
         };
 
+        // await saveToSupabase('dc_status', dcData); // Note: It's saveToSupabase, which is already Prisma now!
         await saveToSupabase('dc_status', dcData);
-
         await updateDiscordStatsEmbed(guild, dcData);
-
-        console.log('✅ DC Status updated:', onlineMembers + '/' + guild.memberCount, 'online |', openTickets, 'open tickets');
 
     } catch (err) {
         console.error('❌ fetchDiscordStats error:', err.message);
@@ -1129,379 +941,24 @@ async function updateDiscordStatsEmbed(guild, data) {
     }
 }
 
-// Supabase — Save Settings
+// Prisma Settings
 async function saveToSupabase(key, data) {
-    if (!SUPABASE_URL || !SUPABASE_KEY) {
-        console.error('❌ SUPABASE credentials missing!');
-        return;
-    }
-
-    const valueJson = JSON.stringify(data);
-    const patchPayload = JSON.stringify({ value: valueJson });
-    const urlObj = new URL(SUPABASE_URL + '/rest/v1/settings');
-
-    const options = {
-        hostname: urlObj.hostname,
-        path: urlObj.pathname + '?key=eq.' + key,
-        method: 'PATCH',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_KEY,
-            'Content-Length': Buffer.byteLength(patchPayload)
+    try {
+        const valueJson = JSON.stringify(data);
+        const existing = await prisma.settings.findFirst({ where: { key } });
+        if (existing) {
+            await prisma.settings.update({ where: { id: existing.id }, data: { value: valueJson } });
+        } else {
+            await prisma.settings.create({ data: { key, value: valueJson } });
         }
-    };
-
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, res => {
-            let body = '';
-            res.on('data', c => body += c);
-            res.on('end', () => {
-                if (res.statusCode >= 400) {
-                    insertToSupabase(key, data).then(resolve).catch(reject);
-                } else {
-                    resolve();
-                }
-            });
-        });
-        req.on('error', reject);
-        req.write(patchPayload);
-        req.end();
-    });
+    } catch (e) {
+        console.error('❌ saveToSupabase Error:', e);
+    }
 }
 
-// Supabase — Insert Settings
 async function insertToSupabase(key, data) {
-    const valueJson = JSON.stringify(data);
-    const payload = JSON.stringify({ key: key, value: valueJson });
-    const urlObj = new URL(SUPABASE_URL + '/rest/v1/settings');
-
-    const options = {
-        hostname: urlObj.hostname,
-        path: urlObj.pathname,
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_KEY,
-            'Authorization': 'Bearer ' + SUPABASE_KEY,
-            'Prefer': 'return=minimal',
-            'Content-Length': Buffer.byteLength(payload)
-        }
-    };
-
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, res => {
-            let body = '';
-            res.on('data', c => body += c);
-            res.on('end', () => resolve());
-        });
-        req.on('error', reject);
-        req.write(payload);
-        req.end();
-    });
+    return saveToSupabase(key, data);
 }
-
-// Presence Update
-client.on('presenceUpdate', () => {
-    scheduleOnlineUpdate(120000);
-});
-
-// Helpers — Extract Ticket Name
-function extractTicketName(fullText, transcriptUrl) {
-    let match = fullText.match(/Case\s*#(\d+)/i) || fullText.match(/case-(\d+)/i);
-    if (match) return `case-${match[1]}`;
-
-    match = fullText.match(/ticket-(\d+)/i) || fullText.match(/Ticket\s*#(\d+)/i);
-    if (match) return `ticket-${match[1]}`;
-
-    if (transcriptUrl) {
-        const parts = transcriptUrl.split('/');
-        const lastPart = parts[parts.length - 1];
-        const numMatch = lastPart.match(/\d+/);
-        if (numMatch) return `case-${numMatch[0]}`;
-        return lastPart.replace('.html', '');
-    }
-
-    return 'ticket';
-}
-
-// Helpers — Extract Ticket Owner
-function extractTicketOwner(fullText) {
-    let match = fullText.match(/(?:Ticket Owner|Owner|User|Created by)[^\d<]*<@!?(\d+)>/i);
-    if (match) return match[1];
-
-    match = fullText.match(/(?:Ticket Owner|Owner|User|Created by)[^\d]*(\d{15,22})/i);
-    if (match) return match[1];
-
-    return null;
-}
-
-// Helpers — Extract Claimed By
-function extractClaimedBy(fullText) {
-    let match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[\s:*]*<@!?(\d+)>/i);
-    if (match) return match[1];
-
-    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y[\s:*]*(\d{15,22})/i);
-    if (match) return match[1];
-
-    match = fullText.match(/(?:Closed|Claimed|Handled)\s*[Bb]y\s*[:\s]+([^\n\r<@\d(][^\n\r(]{2,})/i);
-    if (match) {
-        const name = match[1].trim().split('\n')[0].trim();
-        if (name && name.length > 2 && !name.toLowerCase().includes('unknown') && !name.toLowerCase().includes('ticket')) {
-            return name;
-        }
-    }
-
-    return null;
-}
-
-// Message Handler
-client.on('messageCreate', async (message) => {
-    // Broadcast Command
-    if (message.content.startsWith('!bc')) {
-        if (message.author.id !== '1350531070222794804') return;
-
-        const args = message.content.split(' ');
-        let targetGuild;
-        let bcContent;
-
-        if (args.length >= 3 && /^\d{17,20}$/.test(args[1])) {
-            targetGuild = client.guilds.cache.get(args[1]) || await client.guilds.fetch(args[1]).catch(() => null);
-            const firstTwoWordsLength = args[0].length + 1 + args[1].length + 1;
-            bcContent = message.content.substring(firstTwoWordsLength).trim();
-        } else {
-            targetGuild = message.guild;
-            bcContent = message.content.substring(3).trim();
-        }
-
-        const attachments = Array.from(message.attachments.values()).map(att => att.url);
-
-        if (targetGuild && (bcContent || attachments.length > 0)) {
-            try {
-                await message.channel.send(`⏳ Broadcasting to: ${targetGuild.name}...`);
-                const members = await targetGuild.members.fetch();
-                for (const [memberId, member] of members) {
-                    if (!member.user.bot) {
-                        const sendOptions = {};
-                        if (bcContent) {
-                            sendOptions.content = `${member.toString()}\n\n${bcContent}`;
-                        } else {
-                            sendOptions.content = `${member.toString()}`;
-                        }
-                        if (attachments.length > 0) {
-                            sendOptions.files = attachments;
-                        }
-                        try {
-                            await member.send(sendOptions);
-                            console.log(`✅ Sent to: ${member.user.username}`);
-                        } catch (err) {
-                            console.error(`❌ Failed to send to: ${member.user.username}`);
-                        }
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
-                }
-                await message.channel.send(`Broadcast to ${targetGuild.name} done ✅`);
-            } catch (err) {
-                console.error(err);
-                await message.channel.send(`❌ Broadcast error: ${err.message}`);
-            }
-        } else {
-            await message.channel.send("❌ Error: server not found or message is empty.");
-        }
-        return;
-    }
-
-    if (message.channel.id === LOGGING_CHANNEL_ID && message.author.bot) {
-        console.log('📬 New bot message in Logging channel!');
-        console.log('📝 Bot name:', message.author.username);
-
-        let fullText = message.content || '';
-        let transcriptUrl = null;
-
-        if (message.components && message.components.length > 0) {
-            for (const row of message.components) {
-                if (row.components) {
-                    for (const comp of row.components) {
-                        if (comp.url) {
-                            transcriptUrl = comp.url;
-                        }
-                    }
-                }
-            }
-        }
-
-        if (message.embeds && message.embeds.length > 0) {
-            const embed = message.embeds[0];
-            fullText += '\n' + (embed.title || '') + '\n' + (embed.description || '');
-            if (embed.url) {
-                transcriptUrl = transcriptUrl || embed.url;
-            }
-            if (embed.fields) {
-                embed.fields.forEach(f => {
-                    fullText += '\n' + (f.name || '') + '\n' + (f.value || '');
-                });
-            }
-        }
-
-        let attachmentUrl = null;
-        let cleanFileName = null;
-        if (message.attachments && message.attachments.size > 0) {
-            const htmlAttachment = message.attachments.find(att =>
-                att.name && att.name.endsWith('.html')
-            );
-            if (htmlAttachment) {
-                attachmentUrl = htmlAttachment.url;
-                cleanFileName = htmlAttachment.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-                transcriptUrl = transcriptUrl || htmlAttachment.url;
-            }
-        }
-
-        if (!transcriptUrl) {
-            const urlMatch = fullText.match(/https?:\/\/[^\s)\]]+/);
-            if (urlMatch) {
-                transcriptUrl = urlMatch[0];
-            }
-        }
-
-        if (transcriptUrl || attachmentUrl) {
-            console.log(`📎 Transcript found: ${transcriptUrl || attachmentUrl}`);
-
-            let transcriptContent = '';
-            let transcriptFileName = null;
-            try {
-                if (attachmentUrl && cleanFileName) {
-                    const filePath = path.join(TRANSCRIPTS_FOLDER, cleanFileName);
-                    await downloadFile(attachmentUrl, filePath);
-                    transcriptContent = fs.readFileSync(filePath, 'utf8');
-                    transcriptFileName = cleanFileName;
-                } else if (transcriptUrl && (transcriptUrl.includes('https://') || transcriptUrl.includes('http://'))) {
-                    transcriptContent = await fetchHtmlFromUrl(transcriptUrl);
-                    const parsedName = extractTicketName(fullText, transcriptUrl);
-                    transcriptFileName = `${parsedName}.html`.replace(/[^a-zA-Z0-9.-]/g, '_');
-                    const filePath = path.join(TRANSCRIPTS_FOLDER, transcriptFileName);
-                    fs.writeFileSync(filePath, transcriptContent, 'utf8');
-                }
-            } catch (err) {
-                console.error('Error fetching/processing transcript:', err.message);
-            }
-
-            const ticketName = extractTicketName(fullText, transcriptUrl);
-            const ticketOwnerId = extractTicketOwner(fullText);
-            const claimedBy = extractClaimedBy(fullText);
-
-            // Transcript-based data extraction
-            let openedAt = transcriptContent ? extractTicketOpenedAt(transcriptContent) : null;
-            if (!openedAt) openedAt = new Date().toISOString();
-
-            const openedByUsername = transcriptContent ? extractOpenedByUsername(transcriptContent) : null;
-
-            // Extract channel name from HTML title to find the handler
-            let handlerUsername = null;
-            if (transcriptContent) {
-                const titleMatch = transcriptContent.match(/<title>([^<]+)<\/title>/i);
-                if (titleMatch) {
-                    let title = titleMatch[1].toLowerCase().trim();
-                    if (title.includes(' - ')) title = title.split(' - ').pop().trim();
-
-                    // Ticket Tool sometimes prepends "transcript " to the title
-                    title = title.replace(/^transcript\s*[-:]?\s*/i, '').trim();
-
-                    let handlerStr = title.replace(/^(support|ticket|case|closed)(-\d+)?-?/i, '').trim();
-
-                    // Remove suffixes like -c, -closed
-                    handlerStr = handlerStr.replace(/-c$/i, '').replace(/-closed$/i, '').trim();
-
-                    // Remove special characters (like ༃) so exact matching works
-                    handlerStr = handlerStr.replace(/[^\w\s-]/g, '').trim();
-
-                    if (handlerStr.length > 2 && !handlerStr.match(/^#?\d+$/)) {
-                        handlerUsername = handlerStr;
-                    }
-                }
-            }
-
-            // Fallback to extracting from messages
-            if (!handlerUsername && transcriptContent) {
-                handlerUsername = extractHandlerFromTranscript(transcriptContent, openedByUsername);
-            }
-            if (handlerUsername && Array.isArray(handlerUsername)) {
-                if (handlerUsername.length === 0) handlerUsername = null;
-                else handlerUsername = handlerUsername.join(', ');
-            }
-
-            const responseTime = formatResponseTime(openedAt);
-
-            if (handlerUsername) console.log(`🔍 Handler from transcript: "${handlerUsername}"`);
-            else console.log(`🔍 Handler from transcript: Not found`);
-            if (openedAt) console.log(`⏰ Opened at (UTC): ${openedAt}, response time: ${responseTime}`);
-
-            let panelName = 'Ticket';
-            const transcriptType = transcriptContent ? extractTicketType(transcriptContent) : null;
-            if (transcriptType) {
-                panelName = transcriptType;
-            } else if (ticketName && ticketName.includes('-')) {
-                const firstPart = ticketName.split('-')[0];
-                panelName = firstPart.charAt(0).toUpperCase() + firstPart.slice(1);
-            }
-
-            const userMatches = fullText.match(/<@!?\d+>/g);
-            const users = userMatches ? [...new Set(userMatches)] : [];
-
-            let finalTranscriptPath = null;
-            if (transcriptFileName) {
-                finalTranscriptPath = `transcripts/${transcriptFileName}`;
-            } else {
-                finalTranscriptPath = `transcripts/${ticketName.replace(/[^a-zA-Z0-9.-]/g, '_')}.html`;
-            }
-
-            const ticketData = {
-                timestamp: new Date().toISOString(),
-                openedAt: openedAt || new Date().toISOString(),
-                ticketOwner: ticketOwnerId ? `<@${ticketOwnerId}>` : null,
-                ticketOwnerId: ticketOwnerId,
-                ticketName: ticketName,
-                panelName: panelName,
-                transcriptFile: finalTranscriptPath,
-                transcriptUrl: transcriptUrl || null,
-                claimedBy: claimedBy,
-                handlerUsername: handlerUsername,
-                users: users,
-                responseTime: responseTime
-            };
-
-            if (ticketOwnerId) {
-                try {
-                    const member = message.guild.members.cache.get(ticketOwnerId);
-                    if (member) {
-                        ticketData.ticketOwnerName = member.user.username;
-                        ticketData.ticketOwnerDisplay = member.displayName;
-                    }
-                } catch (E) { }
-            }
-
-            const allTickets = loadTickets();
-            allTickets.unshift(ticketData);
-            const jsContent = saveTickets(allTickets);
-
-            // GitHub — Single Commit Upload
-            const filesToUpload = [{ path: GITHUB_FILE_PATH, content: jsContent }];
-            if (transcriptFileName && transcriptContent) {
-                filesToUpload.push({ path: `transcripts/${transcriptFileName}`, content: transcriptContent });
-            }
-            await uploadFilesToGitHub(filesToUpload, `Ticket closed: ${ticketName}`);
-
-            await saveTicketToSupabase(ticketData);
-
-            console.log(`✅ Ticket saved: ${ticketName}`);
-            console.log('---\n');
-        } else {
-            console.log('⚠️ No transcript link or file found in message.');
-        }
-    }
-});
-
-// Login
-console.log('🔄 Logging in...');
 client.login(DISCORD_TOKEN).catch(err => {
     console.error('❌ Login error:', err.message);
     process.exit(1);
