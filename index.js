@@ -958,39 +958,36 @@ client.on('messageCreate', async (message) => {
         if (message.embeds && message.embeds.length > 0) {
             const embed = message.embeds[0];
             const desc = embed.description || "";
+            const title = embed.title || "";
             
-            if (desc.includes('الـتـرانـسـكـربـت') || desc.includes('بـيـانـات الـتـذكـرة')) {
+            if (title.includes('Archive — Case') || desc.includes('View Transcript')) {
                 console.log('\n📩 تم اكتشاف تكت جديد من البوت!');
                 
                 const ticketData = {
                     timestamp: new Date().toISOString(),
                     ticketOwnerId: null,
                     ticketName: null,
-                    panelName: null,
+                    panelName: 'Archive',
                     transcriptUrl: null,
                     claimedBy: null,
                     users: []
                 };
 
-                const ownerMatch = desc.match(/\*\*Ticket Owner:\*\*.*?<@!?(\d+)>/);
+                // Extract Ticket Name / Case Number from title
+                const caseMatch = title.match(/Cases*#?(\w+)/i);
+                if (caseMatch) ticketData.ticketName = "ticket-" + caseMatch[1];
+                else ticketData.ticketName = "ticket-unknown";
+
+                // Extract User ID
+                const ownerMatch = desc.match(/\*\*User:\*\*.*?<@!?(\d+)>/);
                 if (ownerMatch) ticketData.ticketOwnerId = ownerMatch[1];
 
-                const nameMatch = desc.match(/\*\*Ticket Name:\*\*\s*`([^`]+)`/);
-                if (nameMatch) ticketData.ticketName = nameMatch[1];
-
-                const panelMatch = desc.match(/\*\*Panel Name:\*\*\s*`([^`]+)`/);
-                if (panelMatch) ticketData.panelName = panelMatch[1];
-
+                // Extract Claimed By ID
                 const claimMatch = desc.match(/\*\*Claimed By:\*\*.*?<@!?(\d+)>/);
                 if (claimMatch) ticketData.claimedBy = claimMatch[1];
 
-                const usersMatch = desc.match(/\*\*Users in transcript:\*\*\s*([\s\S]*?)\s*\*\*Link:\*\*/);
-                if (usersMatch) {
-                    const userTags = usersMatch[1].match(/<@!?(\d+)>/g);
-                    if (userTags) ticketData.users = [...new Set(userTags.map(u => u.replace(/[<@!>]/g, '')))];
-                }
-
-                const linkMatch = desc.match(/\*\*Link:\*\*\s*(https?:\/\/[^\s]+)/);
+                // Extract Transcript Link
+                const linkMatch = desc.match(/\[View Transcript\]\((https?:\/\/[^\)]+)\)/i);
                 if (linkMatch) ticketData.transcriptUrl = linkMatch[1];
 
                 if (ticketData.ticketName && ticketData.transcriptUrl) {
@@ -1001,6 +998,7 @@ client.on('messageCreate', async (message) => {
                     await saveTicketToSupabase(ticketData);
                 } else {
                     console.log('⚠️ لم يتم العثور على رابط الترانسكربت أو اسم التكت في الرسالة.');
+                    if (!ticketData.transcriptUrl) console.log('الرابط غير موجود في:', desc);
                 }
             }
         }
