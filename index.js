@@ -952,3 +952,57 @@ client.login(DISCORD_TOKEN).catch(err => {
     console.error('❌ Login error:', err.message);
     process.exit(1);
 });
+
+client.on('messageCreate', async (message) => {
+    if (message.channel.id === LOGGING_CHANNEL_ID && message.author.bot) {
+        if (message.embeds && message.embeds.length > 0) {
+            const embed = message.embeds[0];
+            const desc = embed.description || "";
+            
+            if (desc.includes('الـتـرانـسـكـربـت') || desc.includes('بـيـانـات الـتـذكـرة')) {
+                console.log('\n📩 تم اكتشاف تكت جديد من البوت!');
+                
+                const ticketData = {
+                    timestamp: new Date().toISOString(),
+                    ticketOwnerId: null,
+                    ticketName: null,
+                    panelName: null,
+                    transcriptUrl: null,
+                    claimedBy: null,
+                    users: []
+                };
+
+                const ownerMatch = desc.match(/\*\*Ticket Owner:\*\*.*?<@!?(\d+)>/);
+                if (ownerMatch) ticketData.ticketOwnerId = ownerMatch[1];
+
+                const nameMatch = desc.match(/\*\*Ticket Name:\*\*\s*`([^`]+)`/);
+                if (nameMatch) ticketData.ticketName = nameMatch[1];
+
+                const panelMatch = desc.match(/\*\*Panel Name:\*\*\s*`([^`]+)`/);
+                if (panelMatch) ticketData.panelName = panelMatch[1];
+
+                const claimMatch = desc.match(/\*\*Claimed By:\*\*.*?<@!?(\d+)>/);
+                if (claimMatch) ticketData.claimedBy = claimMatch[1];
+
+                const usersMatch = desc.match(/\*\*Users in transcript:\*\*\s*([\s\S]*?)\s*\*\*Link:\*\*/);
+                if (usersMatch) {
+                    const userTags = usersMatch[1].match(/<@!?(\d+)>/g);
+                    if (userTags) ticketData.users = [...new Set(userTags.map(u => u.replace(/[<@!>]/g, '')))];
+                }
+
+                const linkMatch = desc.match(/\*\*Link:\*\*\s*(https?:\/\/[^\s]+)/);
+                if (linkMatch) ticketData.transcriptUrl = linkMatch[1];
+
+                if (ticketData.ticketName && ticketData.transcriptUrl) {
+                    console.log(`✅ تم استخراج البيانات لتكت: ${ticketData.ticketName}`);
+                    console.log(`🔗 الرابط: ${ticketData.transcriptUrl}`);
+                    
+                    // Call the missing function to save to DB & calculate points
+                    await saveTicketToSupabase(ticketData);
+                } else {
+                    console.log('⚠️ لم يتم العثور على رابط الترانسكربت أو اسم التكت في الرسالة.');
+                }
+            }
+        }
+    }
+});
