@@ -373,38 +373,26 @@ async function analyzeTicketWithAI(transcriptHtml, handlerName) {
         const transcriptText = extractTextFromTranscript(transcriptHtml);
 
         const prompt = `
-You are an expert AI evaluating a Discord admin's performance in a support ticket.
-The admin's name is "${handlerName}".
-Read the following transcript and calculate their points based ONLY on these rules:
+You are a Minecraft server administrator evaluator. Your task is to evaluate the support provided in the following ticket transcript.
+The ticket was handled by: ${handlerName || 'Unknown'}.
 
-1. Ticket Type (ID 20):
-- Claiming the ticket (default) = +2 pts
-- Whitelist ticket handled professionally/perfectly = +5 pts
-- Support ticket handled professionally = +7 pts
-- Team ticket handled professionally & fast = +10 pts
-- Complaint ticket handled professionally = +4 pts
-(Pick the ONE best fit for the overall ticket type and handling quality)
+Rules for points:
+- Responding within 2 minutes of the ticket opening: +1 point.
+- Polite and professional greeting: +1 point.
+- Solving the core issue efficiently: +2 points.
+- Proper grammar and formatting: +1 point.
+Total possible points: 5.
 
-2. Responses (ID 21):
-- Official/formal response = +2 pts
-- Helpful and explanatory response = +3 pts
-- Trolling or unhelpful response = -4 pts
-(Pick the ONE best fit based on their replies)
-
-3. Ticket Level/Speed (ID 22):
-- Handled easy ticket in < 10 mins = +4 pts
-- Handled hard ticket in < 10 mins = +8 pts
-- Handled ticket (general) in < 30 mins = +2 pts
-- Handled any ticket > 1 hour = -4 pts
-(Pick the ONE best fit. Guess the speed/difficulty based on the conversation if timestamps aren't fully clear).
-
-Return ONLY a JSON object with this exact structure (do not use markdown formatting, just raw JSON):
+Return your evaluation as a valid JSON object EXACTLY like this (do not use markdown formatting, just raw JSON):
 {
-  "ticket_type_points": 0,
-  "responses_points": 0,
-  "level_speed_points": 0,
-  "total_points": 0,
-  "reasoning": "Short explanation of why these points were awarded"
+    "totalPoints": 5,
+    "breakdown": {
+        "fast_response": 1,
+        "polite_greeting": 1,
+        "issue_solved": 2,
+        "grammar": 1
+    },
+    "reasoning": "Brief explanation of the score here."
 }
 
 Transcript:
@@ -450,14 +438,10 @@ ${transcriptText.substring(0, 30000)} // Limit length to avoid token issues
         let cleanJson = responseText.replace(/\s*```json/gi, '').replace(/```/g, '').trim();
         const json = JSON.parse(cleanJson);
 
-        // Calculate total manually to be safe
-        const calculatedTotal = (json.ticket_type_points || 0) + (json.responses_points || 0) + (json.level_speed_points || 0);
-        const finalPoints = json.total_points !== undefined ? json.total_points : calculatedTotal;
-
-        console.log(`✅ AI Analysis complete! Awarded ${finalPoints} points. Reasoning: ${json.reasoning}`);
+        console.log(`✅ AI Analysis complete! Awarded ${json.totalPoints || 5} points. Reasoning: ${json.reasoning}`);
         return {
-            totalPoints: finalPoints,
-            breakdown: json,
+            totalPoints: json.totalPoints !== undefined ? json.totalPoints : 5,
+            breakdown: json.breakdown || {},
             reasoning: json.reasoning || "Analyzed successfully"
         };
     } catch (e) {
@@ -622,7 +606,7 @@ async function saveTicketToSupabase(ticketData) {
                         },
                         {
                             action_type: 'Closed Ticket',
-                            details: `[AI Evaluation] ${actionVerbFull} ${Math.abs(ptsToAward)} PTS ${preposition} ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Type: ${aiBreakdown.ticket_type_points || 0}, Resp: ${aiBreakdown.responses_points || 0}, Speed: ${aiBreakdown.level_speed_points || 0}. Note: ${aiReasoning}`,
+                            details: `[AI Evaluation] ${actionVerbFull} ${Math.abs(ptsToAward)} PTS ${preposition} ${empName} for handling ticket ${ticketData.ticketName}. Breakdown: Fast: ${aiBreakdown.fast_response || 0}, Greet: ${aiBreakdown.polite_greeting || 0}, Solved: ${aiBreakdown.issue_solved || 0}, Grammar: ${aiBreakdown.grammar || 0}. Note: ${aiReasoning}`,
                             category: 'Tickets',
                             user_name: 'System',
                             created_at: new Date()
@@ -790,8 +774,8 @@ async function fetchMCStatus() {
                     }
 
                     // Use toJSON() to get raw API data, avoiding discord.js stripping unknown component fields
-                    try { fullText += "\n" + JSON.stringify(message.toJSON()); } catch (e) {}
-                    try { fullText += "\n" + JSON.stringify(message.components); } catch (e) {}
+                    try { fullText += "\n" + JSON.stringify(message.toJSON()); } catch (e) { }
+                    try { fullText += "\n" + JSON.stringify(message.components); } catch (e) { }
 
                     const desc = fullText;
 
@@ -956,15 +940,15 @@ client.login(DISCORD_TOKEN).catch(err => {
 client.on('messageCreate', async (message) => {
     if (message.channel.id === LOGGING_CHANNEL_ID && message.author.bot) {
         console.log('📬 رسالة جديدة في روم اللوقات!');
-        
+
         let fullText = message.content || "";
-        try { fullText += " " + JSON.stringify(message.toJSON ? message.toJSON() : message); } catch(e) {}
-        
+        try { fullText += " " + JSON.stringify(message.toJSON ? message.toJSON() : message); } catch (e) { }
+
         console.log('🔍 البحث في المكونات (JSON preview):', fullText.substring(0, 150));
 
         if (fullText.includes('Archive — Case') || fullText.includes('View Transcript') || fullText.includes('TRANSCRIPT')) {
             console.log('\n📩 تم اكتشاف تكت جديد من البوت (مكونات V2)!');
-            
+
             const ticketData = {
                 timestamp: new Date().toISOString(),
                 ticketOwnerId: null,
@@ -991,7 +975,7 @@ client.on('messageCreate', async (message) => {
             if (ticketData.ticketName && ticketData.transcriptUrl) {
                 console.log(`✅ تم استخراج البيانات لتكت: ${ticketData.ticketName}`);
                 console.log(`🔗 الرابط: ${ticketData.transcriptUrl}`);
-                
+
                 await saveTicketToSupabase(ticketData);
             } else {
                 console.log('⚠️ لم يتم العثور على رابط الترانسكربت أو اسم التكت في الرسالة.');
