@@ -568,6 +568,16 @@ async function saveTicketToSupabase(ticketData) {
             console.log(`🤖 Starting AI Transcript Analysis for ${empName}...`);
             const html = await fetchHtmlFromUrl(ticketData.transcriptUrl);
             if (html) {
+                // Extract Ticket Type and Response Time from HTML if possible
+                const extractedType = extractTicketType(html);
+                if (extractedType) ticketData.panelName = extractedType;
+
+                const extractedOpenedAt = extractTicketOpenedAt(html);
+                if (extractedOpenedAt) {
+                    ticketData.openedAt = extractedOpenedAt;
+                    ticketData.responseTime = formatResponseTime(extractedOpenedAt);
+                }
+
                 const aiResult = await analyzeTicketWithAI(html, empName);
                 ptsToAward = aiResult.totalPoints;
                 aiReasoning = aiResult.reasoning;
