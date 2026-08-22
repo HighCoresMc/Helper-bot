@@ -956,28 +956,14 @@ client.login(DISCORD_TOKEN).catch(err => {
 client.on('messageCreate', async (message) => {
     if (message.channel.id === LOGGING_CHANNEL_ID && message.author.bot) {
         console.log('📬 رسالة جديدة في روم اللوقات!');
-        console.log('📝 هل تحتوي على Embed؟', message.embeds.length > 0);
-        console.log('📝 محتوى الرسالة (content):', message.content ? message.content.substring(0, 50) + '...' : 'فارغ');
         
-        let desc = "";
-        let title = "";
+        let fullText = message.content || "";
+        try { fullText += " " + JSON.stringify(message.toJSON ? message.toJSON() : message); } catch(e) {}
         
-        // Handle if it's an embed
-        if (message.embeds && message.embeds.length > 0) {
-            const embed = message.embeds[0];
-            desc = embed.description || "";
-            title = embed.title || "";
-            console.log('📝 Embed Title:', title);
-            console.log('📝 Embed Desc preview:', desc.substring(0, 100).replace(/\n/g, ' '));
-        } 
-        // Handle if it's plain text (markdown)
-        else if (message.content) {
-            desc = message.content;
-            console.log('📝 No embeds, using content');
-        }
+        console.log('🔍 البحث في المكونات (JSON preview):', fullText.substring(0, 150));
 
-        if (title.includes('Archive — Case') || desc.includes('View Transcript') || desc.includes('Archive — Case') || desc.includes('TRANSCRIPT')) {
-            console.log('\n📩 تم اكتشاف تكت جديد من البوت!');
+        if (fullText.includes('Archive — Case') || fullText.includes('View Transcript') || fullText.includes('TRANSCRIPT')) {
+            console.log('\n📩 تم اكتشاف تكت جديد من البوت (مكونات V2)!');
             
             const ticketData = {
                 timestamp: new Date().toISOString(),
@@ -989,33 +975,29 @@ client.on('messageCreate', async (message) => {
                 users: []
             };
 
-            // Extract Ticket Name / Case Number from title or desc
-            const caseMatch = title.match(/Case\s*#?(\w+)/i) || desc.match(/Case\s*#?(\w+)/i);
+            const caseMatch = fullText.match(/Case\s*#?(\w+)/i);
             if (caseMatch) ticketData.ticketName = "ticket-" + caseMatch[1];
             else ticketData.ticketName = "ticket-unknown";
 
-            // Extract User ID
-            const ownerMatch = desc.match(/\*\*User:\*\*.*?<@!?(\d+)>/);
+            const ownerMatch = fullText.match(/\*\*User:\*\*.*?<@!?(\d+)>/);
             if (ownerMatch) ticketData.ticketOwnerId = ownerMatch[1];
 
-            // Extract Claimed By ID
-            const claimMatch = desc.match(/\*\*Claimed By:\*\*.*?<@!?(\d+)>/);
+            const claimMatch = fullText.match(/\*\*Claimed By:\*\*.*?<@!?(\d+)>/);
             if (claimMatch) ticketData.claimedBy = claimMatch[1];
 
-            // Extract Transcript Link
-            const linkMatch = desc.match(/\[View Transcript\]\((https?:\/\/[^\)]+)\)/i);
+            const linkMatch = fullText.match(/\[View Transcript\]\((https?:\/\/[^\)]+)\)/i);
             if (linkMatch) ticketData.transcriptUrl = linkMatch[1];
 
             if (ticketData.ticketName && ticketData.transcriptUrl) {
                 console.log(`✅ تم استخراج البيانات لتكت: ${ticketData.ticketName}`);
                 console.log(`🔗 الرابط: ${ticketData.transcriptUrl}`);
                 
-                // Call the missing function to save to DB & calculate points
                 await saveTicketToSupabase(ticketData);
             } else {
                 console.log('⚠️ لم يتم العثور على رابط الترانسكربت أو اسم التكت في الرسالة.');
-                if (!ticketData.transcriptUrl) console.log('الرابط غير موجود في:', desc);
             }
+        } else {
+            console.log('الرسالة لا تحتوي على بيانات تكت.');
         }
     }
 });
